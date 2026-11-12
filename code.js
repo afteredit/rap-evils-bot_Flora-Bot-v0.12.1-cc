@@ -175,7 +175,7 @@ const DEFAULT_SETTINGS = {
   DOWNLOAD_BUTTON_REFRESH_DAYS: "20",
   // فقط دو حالت: preview_only (پیش‌فرض) و admin_alert. فایل کامل هرگز در کانال گذاشته نمی‌شود.
   PREVIEW_FALLBACK_POLICY: "preview_only",
-  SEND_PROTECTED_CONTENT: "true",
+  SEND_PROTECTED_CONTENT: "false",
   AUTO_DELETE_DRAFTS_DAYS: "7",
   QUEUE_ENABLED: "true",
   STAGING_CHANNEL_ID: "",
@@ -5855,8 +5855,6 @@ function publishAudioStage_(sub, stage, channel) {
     const performer = joinArtistsAmp_(sub.artists) + (String(sub.featuring || "").trim() ? " feat. " + joinArtistsAmp_(sub.featuring) : "");
     // کپشن پست صوتی طبق قالب: فقط نام ترک + خط تلگرام
     const base = { chat_id: channel, title: truncate_(trackTitle, 60), performer: truncate_(performer, 60), caption: buildAudioCaption_(sub, trackTitle), parse_mode: "HTML" };
-    // جلوگیری از ذخیره/فوروارد فایل در کانال و چت کاربر (قابل خاموش‌کردن).
-    if (String(getSetting_("SEND_PROTECTED_CONTENT") || "true") === "true") base.protect_content = true;
     const markup = audioPostMarkup_(sub, trackId);
     if (markup) base.reply_markup = markup;
     const coverMessageId = Number((stage.visualMessageIds || [])[0] || 0);
@@ -8231,7 +8229,6 @@ function previewSubmissionPost_(chatId, uid, submissionId) {
         { inline_keyboard: [[{ text: "🎧 برش کانال را بشنو", callback_data: "a:subcut:" + sub.id + ":" + (item.seq || index + 1) }]] });
       // دقیقاً همان payload انتشار، فقط به‌جای Blobِ برش، file_id اصلیِ کاربر
       const base = { chat_id: String(chatId), title: truncate_(trackTitle, 60), performer: truncate_(adminPerformerFor_(sub), 60), caption: buildAudioCaption_(sub, trackTitle), parse_mode: "HTML" };
-      if (String(getSetting_("SEND_PROTECTED_CONTENT") || "true") === "true") base.protect_content = true;
       const markup = downloadButtonMarkup_(sub, trackId);
       if (markup) base.reply_markup = markup;
       const coverMessageId = Number(visualIds[0] || 0);
