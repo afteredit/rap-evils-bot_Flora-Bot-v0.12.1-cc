@@ -78,7 +78,7 @@ function resetRuntimeCaches_() {
   SUBMISSION_MEDIA_MEMO_ = null; SUBMISSION_CREDITS_MEMO_ = null;
   MUSIC_LIBRARY_MEMO_ = null; MUSIC_DOWNLOADS_MEMO_ = null; ADMIN_ACCESS_MEMO_ = null;
   SUPPORT_MESSAGES_MEMO_ = null; BOT_USERNAME_MEMO_ = null; CHANNEL_LINK_MEMO_ = null;
-  CONNECTED_CHANNELS_MEMO_ = null; BOT_USER_ID_MEMO_ = null;
+  CONNECTED_CHANNELS_MEMO_ = null; CC_BANNER_MEMO_ = null; BOT_USER_ID_MEMO_ = null;
 }
 
 const HEADERS = {
@@ -1333,6 +1333,8 @@ function migrateSheetColumns_() {
   // ستون‌های جدید ۰.۴ را بدون از دست رفتن داده به انتهای شیت‌های قبلی اضافه می‌کند.
   try { ensureSheet_(APP.SHEETS.ADMIN_LOG, HEADERS.AdminLog); } catch (e) {}
   try { ensureSheet_(APP.SHEETS.SESSIONS, HEADERS.Sessions); } catch (e) {}
+  try { ensureSheet_(APP.SHEETS.CONNECTED_CHANNELS, HEADERS.ConnectedChannels); } catch (e) {}
+  try { ensureSheet_(APP.SHEETS.CC_BANNER, HEADERS.CcBanner); } catch (e) {}
 }
 
 function styleSheets_() {
@@ -1450,7 +1452,10 @@ function getDatabase_() {
 }
 function getSheet_(name) {
   if (SHEET_INSTANCE_MEMO_[name]) return SHEET_INSTANCE_MEMO_[name];
-  const sh = getDatabase_().getSheetByName(name);
+  let sh = getDatabase_().getSheetByName(name);
+  if (!sh && HEADERS[name]) {
+    try { sh = ensureSheet_(name, HEADERS[name]); } catch (e) {}
+  }
   if (!sh) throw new Error("Sheet missing: " + name + " — ابتدا setupProject را اجرا کن.");
   SHEET_INSTANCE_MEMO_[name] = sh;
   return sh;
@@ -1841,7 +1846,7 @@ function rateCountReport_(bucket, windowSec) { try { return Number(CacheService.
 // ───────────────────────── مدیران و دسترسی‌ها ─────────────────────────
 const ADMIN_ROLE_LABELS_ = { full: "مدیر کامل", publisher: "انتشار و دانلود", support: "پشتیبانی", users: "مدیریت کاربران", settings: "تنظیمات و کمپین‌ها" };
 const ADMIN_ROLE_PERMISSIONS_ = {
-  full: ["*"], publisher: ["submissions", "channel"], support: ["support"], users: ["users"], settings: ["settings", "channel", "broadcast"]
+  full: ["*"], publisher: ["submissions", "channel", "broadcast"], support: ["support"], users: ["users"], settings: ["settings", "channel", "broadcast"]
 };
 function getLegacyAdminIds_() { return String(getSetting_("ADMIN_IDS") || "").split(/[\s,;]+/).map(function(x) { return x.trim(); }).filter(Boolean); }
 function getAdminAccessRecords_() {
@@ -1949,7 +1954,7 @@ function adminPermissionForState_(state, stateData) {
   if (s.indexOf("ADM_EDIT_") === 0) return "submissions";
   // دلیل رد بخشی از گردش کار ارسال‌هاست؛ نقش publisher هم باید بتواند رد کند.
   if (s === "ADM_REJECT_REASON") return "submissions";
-  if (s === "ADM_CC_MSG" || s === "ADM_CC_CONFIRM" || s === "ADM_CC_BANNER") return "broadcast";
+  if (s === "ADM_CC_LIST" || s === "ADM_CC_MSG" || s === "ADM_CC_CONFIRM" || s === "ADM_CC_BANNER") return "broadcast";
   if (s === "ADM_BROADCAST_CODE") return "broadcast";
   if (s === "ADM_DIRECT_MSG") return "users";
   if (/^ADM_(CHANNEL_|PUBLISH_INTERVAL)/.test(s)) return "channel";
@@ -3036,7 +3041,7 @@ function getCcBannerItems_() {
   if (CC_BANNER_MEMO_) return CC_BANNER_MEMO_;
   const sh = getSheet_(APP.SHEETS.CC_BANNER);
   CC_BANNER_MEMO_ = sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.CcBanner.length).getValues()
-    .filter(function(r) { return String(r[8]) === "true" || r[8] === true; })
+    .filter(function(r) { return r[8] === true || String(r[8]).toLowerCase() === "true"; })
     .map(function(r) { return { id: String(r[0] || ""), seq: Number(r[1]) || 1, sourceChatId: String(r[2] || ""), sourceMessageId: String(r[3] || ""), kind: String(r[4] || "text"), caption: String(r[5] || ""), createdBy: String(r[6] || ""), createdAt: r[7] || "" }; })
     .sort(function(x, y) { return x.seq - y.seq; });
   return CC_BANNER_MEMO_;
@@ -3058,7 +3063,13 @@ function sendCcBannerToChannel_(row) {
   if (!items.length) return { ok: true, sent: 0, desc: "" };
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
-    const r = it.kind === "text" ? sendMessage_(row.chatId, it.caption) : copyMessage_(row.chatId, it.sourceChatId, it.sourceMessageId);
+    let r = null;
+    if (it.sourceChatId && it.sourceMessageId) {
+      r = copyMessage_(row.chatId, it.sourceChatId, it.sourceMessageId);
+      if ((!r || !r.ok) && it.kind === "text" && it.caption) r = sendMessage_(row.chatId, it.caption);
+    } else {
+      r = sendMessage_(row.chatId, it.caption);
+    }
     if (!r || !r.ok) return { ok: false, sent: i, desc: String(r && r.description || "") };
   }
   return { ok: true, sent: items.length, desc: "" };
@@ -6790,6 +6801,14 @@ function cancelAdminFlow_(uid, session) {
   if (data.draftId) { try { const d = getMusicDraft_(data.draftId); if (d && d.status === "open") deleteDraftCompletely_(data.draftId); } catch (e) {} }
   clearSession_("M:" + uid);
 }
+const ADMIN_MENU_BUTTON_TEXTS_ = [
+  "🎵 ارسال موزیک", "🎼 ارسال آلبوم", "🎵 ارسال‌ها", "🗓 صف انتشار", "⏳ Coming Soon",
+  "🎤 فری‌استایل", "🎤 فری‌استایل‌ها", "👥 کاربران", "🛡 دسترسی مدیران", "💬 پشتیبانی",
+  "📣 پیام همگانی", "📢 کانال‌های وصل‌شده", "🖼 بنر تبلیغاتی", "😴 غیرفعال‌ها", "⚙️ تنظیمات",
+  "📺 کانال", "🎨 دکمه‌ها و رنگ‌ها", "🆘 درخواست‌های رمز", "🌐 عضویت اجباری", "📊 آمار",
+  "🧹 نگهداری و بکاپ", "📚 آثار من"
+];
+function isAdminMenuButton_(text) { return ADMIN_MENU_BUTTON_TEXTS_.indexOf(String(text || "").trim()) >= 0; }
 function handleAdminMenuMessage_(message) {
   const uid = String(message.from.id); const chatId = String(message.chat.id); const text = String(message.text || "").trim();
   const routes = [
@@ -6947,12 +6966,12 @@ function handleAdminCallback_(cb) {
   const uid = String(cb.from.id); const chatId = String(cb.message.chat.id); const data = String(cb.data || "");
   const parts = data.split(":");
   const permission = adminPermissionForCallback_(data);
+  if (permission && permission !== "admins" && !hasAdminPermission_(uid, permission)) { answerCallbackQuery_(cb.id, "دسترسی نداری."); return; }
   if (parts[0] === "acc") { handleConnectedChannelsAdminCallback_(cb); return; }
   if (parts[0] === "bn") { handleCcBannerCallback_(cb); return; }
-  if (permission && permission !== "admins" && !hasAdminPermission_(uid, permission)) { answerCallbackQuery_(cb.id, "دسترسی نداری."); return; }
   const p0 = parts[0];
   try {
-    if (data === "a:home") { answerCallbackQuery_(cb.id); showAdminMenu_(chatId); return; }
+    if (data === "a:home") { clearSession_("M:" + uid); answerCallbackQuery_(cb.id); showAdminMenu_(chatId); return; }
     if (data === "a:noop") { answerCallbackQuery_(cb.id); return; }
     if (data === "a:stats") { answerCallbackQuery_(cb.id); showStatsPanel_(chatId, uid); return; }
     if (data === "a:maintenance") { answerCallbackQuery_(cb.id); showMaintenancePanel_(chatId, uid); return; }
@@ -7742,9 +7761,15 @@ function handleBroadcastCallback_(cb, parts) {
 function handleAdminState_(message, session) {
   const uid = String(message.from.id); const chatId = String(message.chat.id);
   const state = String(session.state || ""); const data = session.data || {};
+  const text = String(message.text || "").trim();
+  // اگر مدیر روی یکی از دکمه‌های اصلی منوی مدیریت کلیک کرد، نشست قبلی را ببند و مستقیم همان بخش را باز کن
+  if (isAdminMenuButton_(text)) {
+    cancelAdminFlow_(uid, session);
+    handleAdminMenuMessage_(message);
+    return;
+  }
   const requiredPermission = adminPermissionForState_(state, data);
   if (requiredPermission && !hasAdminPermission_(uid, requiredPermission)) { clearSession_("M:" + uid); sendMessage_(chatId, "⛔ نقش تو اجازهٔ این کار را ندارد.", adminKeyboard_()); return; }
-  const text = String(message.text || "").trim();
   const finish = function(reply) { clearSession_("M:" + uid); showAdminMenu_(chatId, reply); };
 
   // ویرایش دستی اثر توسط مدیر (ADM_EDIT_TITLE / …_COVER / …_AUDIO / …)
@@ -7755,7 +7780,7 @@ function handleAdminState_(message, session) {
     const target = String(data.target || "cc_all");
     const kind = message.photo ? "photo" : message.audio ? "audio" : message.video ? "video" : message.voice ? "voice" : message.document ? "document" : (message.text ? "text" : "");
     if (!kind) { sendMessage_(chatId, "قالب را نفهمیدم — متن، عکس، صوت، ویدیو یا فایل بفرست.", cancelKeyboard_()); return; }
-    const item = { kind: kind, caption: kind === "text" ? String(message.text || "") : String(message.caption || ""), sourceChatId: kind === "text" ? "" : String(message.chat.id), sourceMessageId: kind === "text" ? "" : String(message.message_id) };
+    const item = { kind: kind, caption: kind === "text" ? String(message.text || "") : String(message.caption || ""), sourceChatId: String(message.chat.id), sourceMessageId: String(message.message_id) };
     const n = ccBroadcastRows_(target).length;
     setSession_("M:" + uid, "ADM_CC_CONFIRM", { target: target, item: item, sel: data.sel || [], page: data.page || 0 });
     sendMessage_(chatId, "📨 پیام آماده شد — مخاطب: " + n + " کانال وصل‌شده.\nچطور فرستاده شود؟", { inline_keyboard: [[{ text: "🚀 ارسال فوری (همین حالا)", callback_data: "acc:now" }, { text: "⏳ بگذار در صف", callback_data: "acc:queue" }], [{ text: "❌ انصراف", callback_data: "acc:cancelcb" }]] });
@@ -7765,12 +7790,13 @@ function handleAdminState_(message, session) {
   if (state === "ADM_CC_BANNER") {
     const kind = message.photo ? "photo" : message.audio ? "audio" : message.video ? "video" : message.voice ? "voice" : message.document ? "document" : (message.text ? "text" : "");
     if (!kind) { sendMessage_(chatId, "قالب را نفهمیدم — بنر را به‌صورت متن، عکس، صوت، ویدیو یا فایل بفرست.", cancelKeyboard_()); return; }
-    const item = { kind: kind, caption: kind === "text" ? String(message.text || "") : String(message.caption || ""), sourceChatId: kind === "text" ? "" : String(message.chat.id), sourceMessageId: kind === "text" ? "" : String(message.message_id) };
+    const item = { kind: kind, caption: kind === "text" ? String(message.text || "") : String(message.caption || ""), sourceChatId: String(message.chat.id), sourceMessageId: String(message.message_id) };
     setCcBanner_(item, uid);
     logAdminAction_(uid, "cc_banner_set", kind, item.caption.slice(0, 80));
     const rep = sendCcBannerToAll_(getActiveConnectedChannels_());
     clearSession_("M:" + uid);
     sendMessage_(chatId, "🖼 بنر ثبت شد و به کانال‌های وصل‌شده فرستاده شد.\n✅ " + rep.sent + " کانال · ⛔ " + rep.failed + " خطا" + (rep.kicked ? " (غیرفعال شد: " + rep.kicked + ")" : ""), adminKeyboard_());
+    showCcBannerPanel_(chatId, uid);
     return;
   }
 
@@ -8662,30 +8688,51 @@ function sendCcBroadcastNow_(broadcastId) {
   return rep;
 }
 function showCcBannerPanel_(chatId, uid) {
+  if (!adminGate_(chatId, uid, "broadcast")) return;
+  clearSession_("M:" + uid);
   const items = getCcBannerItems_();
+  const autoOn = String(getSetting_("CC_BANNER_ON_CONNECT") || "true") === "true";
   const lines = ["🖼 بنر تبلیغاتی کانال ما"];
   if (!items.length) lines.push("هنوز بنری ثبت نشده. هر کانالی که وصل شود، بنر در آن پست می‌شود (اگر بنری باشد).");
   else {
     const it = items[0];
     lines.push("بنر فعلی: " + (it.kind === "text" ? "متنی" : it.kind) + " · ثبت‌شده توسط " + (it.createdBy || "؟") + " · 🗓 " + formatDate_(it.createdAt));
-    if (it.kind === "text" && it.caption) lines.push("«" + truncate_(it.caption, 120) + "»");
-    lines.push("کانال‌های وصل‌شده: " + getActiveConnectedChannels_().length);
+    if (it.caption) lines.push("«" + truncate_(it.caption, 120) + "»");
+    lines.push("کانال‌های وصل‌شدهٔ فعال: " + getActiveConnectedChannels_().length);
   }
+  lines.push("ارسال خودکار هنگام اتصال کانال جدید: " + (autoOn ? "🟢 روشن" : "🔴 خاموش"));
   const kb = [[{ text: "📤 ثبت بنر جدید", callback_data: "bn:new" }]];
   if (items.length) {
-    kb.push([{ text: "📨 ارسال دوباره به همهٔ کانال‌ها", callback_data: "bn:sendall" }, { text: "🗑 حذف بنر", callback_data: "bn:del" }]);
+    kb.push([{ text: "👁 پیش‌نمایش بنر", callback_data: "bn:preview" }, { text: "📨 ارسال دوباره به همهٔ کانال‌ها", callback_data: "bn:sendall" }]);
+    kb.push([{ text: "🗑 حذف بنر", callback_data: "bn:del" }]);
   }
+  kb.push([{ text: (autoOn ? "🔴 خاموش‌کردن" : "🟢 روشن‌کردن") + " ارسال خودکار در اتصال", callback_data: "bn:toggleauto" }]);
   kb.push([{ text: "🏠 منو", callback_data: "a:home" }]);
   sendMessage_(chatId, lines.join("\n"), { inline_keyboard: kb });
 }
 function handleCcBannerCallback_(cb) {
   const uid = String(cb.from.id); const chatId = String(cb.message.chat.id);
+  if (!hasAdminPermission_(uid, "broadcast")) { answerCallbackQuery_(cb.id, "دسترسی نداری."); return; }
   const parts = String(cb.data || "").split(":");
   const action = parts[1] || "panel";
   if (action === "new") {
     setSession_("M:" + uid, "ADM_CC_BANNER", {});
     answerCallbackQuery_(cb.id);
     sendMessage_(chatId, "🖼 بنر تازه را بفرست (متن، عکس، صوت، ویدیو یا فایل). به‌محض ثبت، به همهٔ کانال‌های وصل‌شده فرستاده می‌شود و از این به بعد هر کانال تازه‌ای هم آن را می‌گیرد.", cancelKeyboard_());
+    return;
+  }
+  if (action === "preview") {
+    const items = getCcBannerItems_();
+    if (!items.length) { answerCallbackQuery_(cb.id, "بنری ثبت نشده است."); showCcBannerPanel_(chatId, uid); return; }
+    answerCallbackQuery_(cb.id);
+    sendCcBannerToChannel_({ chatId: chatId });
+    return;
+  }
+  if (action === "toggleauto") {
+    const next = String(getSetting_("CC_BANNER_ON_CONNECT") || "true") === "true" ? "false" : "true";
+    setSetting_("CC_BANNER_ON_CONNECT", next);
+    answerCallbackQuery_(cb.id, next === "true" ? "ارسال خودکار روشن شد" : "ارسال خودکار خاموش شد");
+    showCcBannerPanel_(chatId, uid);
     return;
   }
   if (action === "sendall") {
