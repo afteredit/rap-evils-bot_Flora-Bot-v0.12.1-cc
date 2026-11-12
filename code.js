@@ -138,8 +138,6 @@ const DEFAULT_SETTINGS = {
   POST_FREESTYLE_TEXT: "FREESTYLE 🎤",
   POST_TELEGRAM_LINK: "", POST_DOWNLOAD_BUTTON_ON_COVER: "false",
   POST_DOWNLOAD_BUTTON_TEXT: "🎧 دریافت آهنگ کامل",
-  // متن یادداشت زیر پست صوتی کانال (برش ۳۰ ثانیه‌ای از اوج). مقدار «off» = بدون یادداشت.
-  POST_PREVIEW_NOTE: "🎧 ۳۰ ثانیه از اوج آهنگ — برای فایل کامل دکمهٔ زیر را بزن (بات باز می‌شود و فایل کامل را می‌فرستد؛ یک دقیقه بعد خودکار پاک می‌شود).",
   // ── برش کانال: ۳۰ ثانیه از «اوج» آهنگ ──
   // peak = پرانرژی‌ترین بازهٔ ۳۰ ثانیه‌ای (از global_gain و اندازهٔ فریم‌های MP3) · start = ۳۰ ثانیهٔ نخست
   PREVIEW_PEAK_MODE: "peak",
@@ -5248,10 +5246,6 @@ function buildAudioCaption_(submission, trackTitle) {
   const lines = [htmlEscape_(title)];
   const telegram = getChannelTelegramTarget_();
   if (telegram) lines.push("🔵 " + linkHtml_(telegram.url, telegram.label));
-  // آنچه در کانال می‌بینید فقط برش ۳۰ ثانیه‌ای است؛ فایل کامل با دکمهٔ شیشه‌ای زیر همین پست
-  // (باز شدن بات) برای کاربر ارسال می‌شود و یک دقیقه بعد خودکار از گفت‌وگو پاک می‌شود.
-  const note = String(getSetting_("POST_PREVIEW_NOTE") || "").trim();
-  if (note !== "off") lines.push(note || ("🎧 " + getMusicPreviewSeconds_() + "s highlight — tap the button below for the full track"));
   return lines.join("\n");
 }
 // ترک بدون فایل منتشرشده نباید دکمه/لینک دانلود داشته باشد.
