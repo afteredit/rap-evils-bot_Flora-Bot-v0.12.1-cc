@@ -709,7 +709,11 @@ const MSG = {
     CC_ADD_NOT_ADMIN: "❌ بات در این کانال ادمین نیست (یا دسترسی ارسال ندارد). اول بات را ادمین کن و دوباره امتحان کن.",
     CC_ADD_TAKEN: "❌ این کانال قبلاً توسط کاربر دیگری وصل شده است.",
     CC_ADD_LIMIT: "❌ سقف کانال‌های وصل‌شدهٔ تو {n} است؛ اول یکی را جدا کن.",
-    CC_RM_OK: "🗑 کانال «{t}» جدا شد.",
+    CC_RM_OK: "🗑 کانال «{t}» حذف شد.",
+    CC_EDIT_ASK: "✏️ آیدی یا یوزرنیم کانال جدید را بفرست تا جایگزین کانال «{t}» شود (یا اگر فقط نام/یوزرنیم همین کانال را در تلگرام عوض کرده‌ای، دکمهٔ «🔄 همگام‌سازی» را بزن):",
+    CC_EDIT_OK: "✅ کانال «{old}» با کانال «{t}» جایگزین شد.",
+    CC_SYNC_OK: "🔄 مشخصات کانال «{t}» از تلگرام به‌روزرسانی شد.",
+    CC_BANNER_DELETED_WARN: "⚠️ بنر تبلیغاتی ما را از کانال «{t}» پاک کرده بودی!\n❌ پیام «پوشش داده شد» از کانال اصلی حذف شد و بنر جدید دوباره در کانالت ارسال گردید. لطفاً بنر را از کانالت پاک نکن.",
     CC_GATE_TEXT: "📢 برای ارسال اثر و دیدن آثار، اول باید بات را در کانال تلگرامت ادمین کنی (دسترسی کامل).\nاز این به بعد ما کارهایت را پوشش می‌دهیم و کانالت هم تبلیغ می‌شود.",
     CC_GATE_BTN: "📢 اتصال کانال",
     CC_PROMO_TEXT: "🎬 اثر تازهٔ «{t}» در کانال اصلی منتشر شد.",
@@ -983,7 +987,11 @@ const MSG = {
     CC_ADD_NOT_ADMIN: "❌ The bot is not an admin there (or cannot post). Make it admin first, then retry.",
     CC_ADD_TAKEN: "❌ This channel is already connected by another user.",
     CC_ADD_LIMIT: "❌ Your connected-channel limit is {n}; disconnect one first.",
-    CC_RM_OK: "🗑 Channel «{t}» disconnected.",
+    CC_RM_OK: "🗑 Channel «{t}» removed.",
+    CC_EDIT_ASK: "✏️ Send the new channel username or id to replace «{t}» (or tap «🔄 Sync info» if you only renamed it):",
+    CC_EDIT_OK: "✅ Channel «{old}» was replaced with «{t}».",
+    CC_SYNC_OK: "🔄 Channel «{t}» info updated from Telegram.",
+    CC_BANNER_DELETED_WARN: "⚠️ You deleted our promotional banner from channel «{t}»!\n❌ Your coverage notice was removed from the main channel and a new banner has been re-posted to your channel. Please do not delete the banner.",
     CC_GATE_TEXT: "📢 To submit works and view them, first make the bot an admin in your Telegram channel (full access).\nFrom then on we cover your work and advertise your channel.",
     CC_GATE_BTN: "📢 Connect channel",
     CC_PROMO_TEXT: "🎬 New work «{t}» was published on the main channel.",
@@ -2485,6 +2493,10 @@ function handleMessage_(message) {
     if (!isLoggedIn_(uid)) { clearSession_("M:" + uid); sendEntryCard_(chatId, t_(uid, "LOGIN_NEEDED")); return; }
     handleConnectedChannelAdd_(message, session); return;
   }
+  if (session && session.state === "CC_EDIT") {
+    if (!isLoggedIn_(uid)) { clearSession_("M:" + uid); sendEntryCard_(chatId, t_(uid, "LOGIN_NEEDED")); return; }
+    handleConnectedChannelEdit_(message, session); return;
+  }
   if (admin && !isAdminAuthenticated_(uid)) {
     if (text === "🟡 ثبت‌نام / ورود" || text === "🟡 ثبت‌نام" || text === "🔑 ورود" || text === MSG.en.BTN_REGISTER) {
       if (getSession_("AUTH:" + uid)) { showAdminMenu_(chatId); return; }
@@ -2508,6 +2520,9 @@ function handleMessage_(message) {
     handleAdminMenuMessage_(message); return;
   }
   const u = getUserById_(uid); const loggedIn = !!(u && isLoggedIn_(uid));
+  if (loggedIn && u && !u.blocked && u.active) {
+    verifyUserConnectedChannelsBanner_(uid, chatId);
+  }
   if (session && session.state === "USR_SUPPORT") {
     if (loggedIn) {
       if (u.blocked || !u.active) { sendMessage_(chatId, t_(uid, u.blocked ? "ACCOUNT_BLOCKED" : "ACCOUNT_INACTIVE")); return; }
@@ -2549,7 +2564,10 @@ function adminEntry_(chatId, uid) {
 function handleCallbackQuery_(cb) {
   if (!cb || !cb.from) return;
   const uid = String(cb.from.id); const data = String(cb.data || ""); const chatId = cb.message && cb.message.chat ? String(cb.message.chat.id) : uid;
-  if (!isAdmin_(uid) && isLoggedIn_(uid) && getUserById_(uid)) touchUser_(uid);
+  if (!isAdmin_(uid) && isLoggedIn_(uid) && getUserById_(uid)) {
+    touchUser_(uid);
+    verifyUserConnectedChannelsBanner_(uid, chatId);
+  }
   if (data === "fj:check") { handleJoinCallback_(cb); return; }
   if (data.indexOf("lg:") === 0) {
     const lang = data.split(":")[1] || "fa";
@@ -3021,6 +3039,7 @@ function ownerChannelButtonRow_(sub) {
 function markConnectedChannelKicked_(row, err) {
   setConnectedChannelField_(row.id, "status", "kicked");
   setConnectedChannelField_(row.id, "lastError", truncate_(String(err || ""), 200));
+  try { deleteCoverNotifyFromMainChannel_(row.id); } catch (e) {}
   try { sendMessage_(row.userId, t_(row.userId, "CC_KICKED_NOTIFY", { t: row.title })); } catch (e) {}
 }
 function sendOwnerChannelPromo_(sub, postUrl) {
@@ -3249,9 +3268,118 @@ function sendCcBannerToAll_(rows, adminId) {
 // اطلاع در کانال اصلی: «پوشش داده شد» + آیدی کانال کاربر
 function postCoverNotifyToMainChannel_(row, owner) {
   const channel = normalizeChannelId_(getSetting_("CHANNEL_ID"));
-  if (!channel) return;
+  if (!channel || !row) return;
+  const existing = getActiveCcPosts_().find(function(p) { return p.sourceType === "cover_notify" && p.channelId === String(row.id); });
+  if (existing) return;
   const lines = ["🤝 پوشش داده شد", "📺 " + (row.title || row.chatId) + (row.username ? " — @" + String(row.username).replace(/^@/, "") : ""), "🆔 " + row.chatId, "👤 " + ((owner && owner.rapName) || row.userId)];
-  try { sendMessage_(channel, lines.join("\n")); } catch (e) { logError_("postCoverNotifyToMainChannel_", e); }
+  try {
+    const r = sendMessage_(channel, lines.join("\n"));
+    if (r && r.ok && r.result && r.result.message_id) {
+      recordCcPost_({
+        batchId: "COV_" + String(row.id),
+        sourceType: "cover_notify",
+        channelId: row.id,
+        chatId: channel,
+        messageId: Number(r.result.message_id),
+        kind: "text",
+        caption: lines.join("\n"),
+        fileId: "",
+        createdBy: String(row.userId || "")
+      });
+    }
+  } catch (e) { logError_("postCoverNotifyToMainChannel_", e); }
+}
+function deleteCoverNotifyFromMainChannel_(channelId) {
+  let removed = 0;
+  getActiveCcPosts_().filter(function(p) { return p.sourceType === "cover_notify" && p.channelId === String(channelId); }).forEach(function(p) {
+    const r = deleteCcPostRecord_(p);
+    if (r.ok) removed++;
+  });
+  return removed;
+}
+// بررسی اینکه آیا پیام بنر در کانال کاربر هنوز وجود دارد یا توسط کاربر پاک شده است
+function checkChannelMessageExists_(chatId, messageId) {
+  if (!chatId || !messageId) return { exists: false, reason: "deleted" };
+  // ۱) بررسی بی‌سر و صدا با setMessageReaction (بدون هیچ تغییری در متن، رسانه یا دکمه‌های پیام)
+  const r = telegramRequest_("setMessageReaction", {
+    chat_id: String(chatId),
+    message_id: Number(messageId),
+    reaction: JSON.stringify([])
+  });
+  if (r && r.ok) return { exists: true, reason: "ok" };
+  const desc = String((r && r.description) || "");
+  if (/message to react not found|message_id_invalid|message not found|message to edit not found|message can't be found/i.test(desc)) {
+    return { exists: false, reason: "deleted" };
+  }
+  if (/kicked|not enough rights|chat not found|forbidden|have the right/i.test(desc)) {
+    return { exists: false, reason: "kicked", desc: desc };
+  }
+  if (/reaction_invalid|reactions_too_many|reactions are disabled/i.test(desc)) {
+    return { exists: true, reason: "ok" };
+  }
+  // ۲) پشتیبان: بررسی با editMessageReplyMarkup
+  const r2 = telegramRequest_("editMessageReplyMarkup", {
+    chat_id: String(chatId),
+    message_id: Number(messageId),
+    reply_markup: { inline_keyboard: [] }
+  });
+  if (r2 && r2.ok) return { exists: true, reason: "ok" };
+  const desc2 = String((r2 && r2.description) || "");
+  if (/message is not modified|message can't be edited/i.test(desc2)) return { exists: true, reason: "ok" };
+  if (/message to edit not found|message_id_invalid|message not found/i.test(desc2)) return { exists: false, reason: "deleted" };
+  if (/kicked|not enough rights|chat not found|forbidden|have the right/i.test(desc2)) return { exists: false, reason: "kicked", desc: desc2 };
+  return { exists: true, reason: "unknown" };
+}
+// در هر تعامل کاربر با بات، بررسی می‌شود که بنر تبلیغاتی ما از کانال‌های متصل او پاک نشده باشد
+function verifyUserConnectedChannelsBanner_(uid, notifyChatId) {
+  try {
+    if (!uid || isAdmin_(uid)) return;
+    const channels = getConnectedChannelsForUser_(uid);
+    if (!channels.length) return;
+    const bannerItems = getCcBannerItems_();
+    const bannerEnabled = String(getSetting_("CC_BANNER_ON_CONNECT") || "true") === "true" && bannerItems.length > 0;
+    channels.forEach(function(ch) {
+      const bannerPosts = getActiveCcPosts_().filter(function(p) {
+        return p.sourceType === "banner" && (p.channelId === String(ch.id) || p.chatId === String(ch.chatId));
+      }).sort(function(a, b) { return dateMillis_(b.createdAt) - dateMillis_(a.createdAt); });
+
+      if (bannerPosts.length) {
+        const latestBanner = bannerPosts[0];
+        const chk = checkChannelMessageExists_(ch.chatId, latestBanner.messageId);
+        if (!chk.exists && chk.reason === "kicked") {
+          bannerPosts.forEach(function(bp) { setCcPostFields_(bp.postId, { status: "deleted" }); });
+          deleteCoverNotifyFromMainChannel_(ch.id);
+          markConnectedChannelKicked_(ch, chk.desc || "kicked");
+          return;
+        }
+        if (!chk.exists && chk.reason === "deleted") {
+          // کاربر بنر ما را از کانالش پاک کرده است:
+          // ۱) بنرهای قبلی در شیت به وضعیت deleted درمی‌آیند
+          bannerPosts.forEach(function(bp) { setCcPostFields_(bp.postId, { status: "deleted" }); });
+          // ۲) پیام «پوشش داده شد» مربوط به این کانال از کانال اصلی ما حذف می‌شود
+          deleteCoverNotifyFromMainChannel_(ch.id);
+          // ۳) بلافاصله یک بنر جدید در کانالش ارسال و آیدی پیام جدید ثبت می‌شود (تا اگر باز پاک کرد تشخیص دهد)
+          if (bannerEnabled) {
+            const resent = sendCcBannerToChannel_(ch);
+            if (!resent.ok && /kicked|not enough rights|chat not found|forbidden|have the right|admin/i.test(resent.desc)) {
+              markConnectedChannelKicked_(ch, resent.desc);
+              return;
+            }
+          }
+          // ۴) اخطار به کاربر در بات
+          const targetChat = String(notifyChatId || uid);
+          sendMessage_(targetChat, t_(uid, "CC_BANNER_DELETED_WARN", { t: ch.title || ch.chatId }));
+        }
+      } else if (bannerEnabled) {
+        // اگر بنر فعال است ولی این کانال هنوز بنر فعالی ندارد، بنر را بفرست و ثبت کن
+        const sent = sendCcBannerToChannel_(ch);
+        if (!sent.ok && /kicked|not enough rights|chat not found|forbidden|have the right|admin/i.test(sent.desc)) {
+          deleteCoverNotifyFromMainChannel_(ch.id);
+          markConnectedChannelKicked_(ch, sent.desc);
+        }
+      }
+    });
+  } catch (e) { logError_("verifyUserConnectedChannelsBanner_", e, { userId: uid }); }
 }
 // بعد از اتصال موفق: بنر (اگر ثبت شده و روشن) در همان کانال + اطلاع پوشش در کانال اصلی
 function ccFinishConnect_(row) {
@@ -3264,6 +3392,14 @@ function ccFinishConnect_(row) {
   }
   postCoverNotifyToMainChannel_(row, getUserById_(row.userId));
   return { ok: true, row: row, banner: "sent" };
+}
+function disconnectChannelCompletely_(row) {
+  if (!row) return;
+  setConnectedChannelField_(row.id, "status", "removed");
+  deleteCoverNotifyFromMainChannel_(row.id);
+  getActiveCcPosts_().filter(function(p) { return p.sourceType !== "cover_notify" && (p.channelId === String(row.id) || p.chatId === String(row.chatId)); }).forEach(function(p) {
+    deleteCcPostRecord_(p);
+  });
 }
 function connectChannelForUser_(uid, input) {
   const raw = String(input || "").trim();
@@ -3334,7 +3470,7 @@ function handleUserMenuMessage_(message, user) {
   if (text === tr_("BTN_SUPPORT", null, "fa") || text === MSG.en.BTN_SUPPORT || text === "📞 پشتیبانی") { startUserSupport_(chatId, uid); return; }
   showUserMenu_(chatId, lang === "en" ? "" : "");
 }
-// ───────────────────────── کانال‌های وصل‌شده (سمت کاربر) ─────────────────────────
+// ───────────────────────── کانال‌های وصل‌شده (سمت کاربر / هنرمند) ─────────────────────────
 function showMyChannels_(chatId, uid) {
   const list = getConnectedChannelsForUser_(uid);
   const max = Math.max(1, Number(getSetting_("CONNECTED_CHANNELS_MAX") || 3));
@@ -3345,8 +3481,12 @@ function showMyChannels_(chatId, uid) {
   const lines = [t_(uid, "CC_LIST_TITLE") + " — " + list.length + "/" + max];
   const rows = [];
   list.forEach(function(c) {
+    const shortTitle = truncate_(c.title || c.chatId, 18);
     lines.push("📺 " + (c.title || c.chatId) + (c.username ? " — @" + String(c.username).replace(/^@/, "") : " (خصوصی)") + "\n   👥 " + (c.members || 0) + " · 🗓 " + formatDate_(c.connectedAt));
-    rows.push([{ text: "🗑 جداسازی: " + truncate_(c.title || c.chatId, 24), callback_data: "myc:rm:" + c.id }]);
+    rows.push([
+      { text: "✏️ ویرایش «" + shortTitle + "»", callback_data: "myc:edit:" + c.id },
+      { text: "🗑 حذف «" + shortTitle + "»", callback_data: "myc:rm:" + c.id }
+    ]);
   });
   if (list.length < max) rows.push([{ text: "➕ " + t_(uid, "CC_GATE_BTN"), callback_data: "myc:add" }]);
   rows.push([{ text: "🏠 منو", callback_data: "myc:home" }]);
@@ -3358,21 +3498,51 @@ function handleMyChannelsCallback_(cb) {
   if (!isLoggedIn_(uid)) { answerCallbackQuery_(cb.id, t_(uid, "LOGIN_NEEDED")); return; }
   const parts = String(cb.data || "").split(":");
   const action = parts[1] || "list";
-  if (action === "home") { answerCallbackQuery_(cb.id); showUserMenu_(chatId); return; }
+  if (action === "home") { clearSession_("M:" + uid); answerCallbackQuery_(cb.id); showUserMenu_(chatId); return; }
   if (action === "add") {
     answerCallbackQuery_(cb.id);
     setSession_("M:" + uid, "CC_ADD", {});
     sendMessage_(chatId, t_(uid, "CC_ADD_ASK"), cancelKeyboard_());
     return;
   }
+  if (action === "edit") {
+    const row = getConnectedChannelById_(parts[2] || "");
+    if (!row || row.userId !== uid || row.status !== "active") { answerCallbackQuery_(cb.id, t_(uid, "EXPIRED_BTN")); showMyChannels_(chatId, uid); return; }
+    answerCallbackQuery_(cb.id);
+    setSession_("M:" + uid, "CC_EDIT", { channelId: row.id });
+    sendMessage_(chatId, t_(uid, "CC_EDIT_ASK", { t: row.title || row.chatId }), {
+      inline_keyboard: [
+        [{ text: "🔄 همگام‌سازی نام/آیدی همین کانال از تلگرام", callback_data: "myc:sync:" + row.id }],
+        [{ text: "⬅️ انصراف و بازگشت", callback_data: "myc:list" }]
+      ]
+    });
+    return;
+  }
+  if (action === "sync") {
+    const row = getConnectedChannelById_(parts[2] || "");
+    if (!row || row.userId !== uid || row.status !== "active") { answerCallbackQuery_(cb.id, t_(uid, "EXPIRED_BTN")); showMyChannels_(chatId, uid); return; }
+    const chat = telegramRequest_("getChat", { chat_id: row.chatId });
+    if (chat && chat.ok && chat.result) {
+      setConnectedChannelField_(row.id, "title", String(chat.result.title || row.title || ""));
+      setConnectedChannelField_(row.id, "username", String(chat.result.username || ""));
+      setConnectedChannelField_(row.id, "lastOkAt", new Date());
+    }
+    clearSession_("M:" + uid);
+    const updated = getConnectedChannelById_(row.id) || row;
+    answerCallbackQuery_(cb.id, t_(uid, "CC_SYNC_OK", { t: updated.title || updated.chatId }));
+    showMyChannels_(chatId, uid);
+    return;
+  }
   if (action === "rm") {
     const row = getConnectedChannelById_(parts[2] || "");
     if (!row || row.userId !== uid) { answerCallbackQuery_(cb.id, t_(uid, "EXPIRED_BTN")); return; }
-    setConnectedChannelField_(row.id, "status", "removed");
+    disconnectChannelCompletely_(row);
+    clearSession_("M:" + uid);
     answerCallbackQuery_(cb.id, t_(uid, "CC_RM_OK", { t: row.title }));
     showMyChannels_(chatId, uid);
     return;
   }
+  clearSession_("M:" + uid);
   answerCallbackQuery_(cb.id);
   showMyChannels_(chatId, uid);
 }
@@ -3381,7 +3551,32 @@ function handleConnectedChannelAdd_(message, session) {
   const res = connectChannelForUser_(uid, message.text || "");
   if (!res.ok) { sendMessage_(chatId, t_(uid, res.code, { n: res.n || "" }), cancelKeyboard_()); return; }
   clearSession_("M:" + uid);
-  sendMessage_(chatId, t_(uid, "CC_ADD_OK", { t: res.row.title }));
+  sendMessage_(chatId, t_(uid, "CC_ADD_OK", { t: res.row.title }), userKeyboard_(uid));
+  showMyChannels_(chatId, uid);
+}
+function handleConnectedChannelEdit_(message, session) {
+  const uid = String(message.from.id); const chatId = String(message.chat.id);
+  const data = (session && session.data) || {};
+  const oldRow = getConnectedChannelById_(data.channelId || "");
+  if (!oldRow || oldRow.userId !== uid || oldRow.status !== "active") {
+    clearSession_("M:" + uid);
+    showMyChannels_(chatId, uid);
+    return;
+  }
+  const oldTitle = oldRow.title || oldRow.chatId;
+  // موقتاً کانال قبلی را غیرفعال می‌کنیم تا سقف کانال‌ها (CONNECTED_CHANNELS_MAX) مانع جایگزینی نشود
+  setConnectedChannelField_(oldRow.id, "status", "replacing");
+  const res = connectChannelForUser_(uid, message.text || "");
+  if (!res.ok) {
+    setConnectedChannelField_(oldRow.id, "status", "active");
+    sendMessage_(chatId, t_(uid, res.code, { n: res.n || "" }), cancelKeyboard_());
+    return;
+  }
+  if (String(res.row.id) !== String(oldRow.id)) {
+    disconnectChannelCompletely_(oldRow);
+  }
+  clearSession_("M:" + uid);
+  sendMessage_(chatId, t_(uid, "CC_EDIT_OK", { old: oldTitle, t: res.row.title }), userKeyboard_(uid));
   showMyChannels_(chatId, uid);
 }
 function showProfile_(chatId, uid, user) {
@@ -8824,7 +9019,7 @@ function showAdminConnectedChannels_(chatId, uid, page) {
   const kb = [];
   all.slice(p * per, p * per + per).forEach(function(c) {
     const u = getUserById_(c.userId);
-    const chPosts = getActiveCcPosts_().filter(function(x) { return x.channelId === c.id || x.chatId === String(c.chatId); }).length;
+    const chPosts = getActiveCcPosts_().filter(function(x) { return x.sourceType !== "cover_notify" && (x.channelId === c.id || x.chatId === String(c.chatId)); }).length;
     lines.push((c.status === "active" ? "✅ " : "⛔ ") + (c.title || c.chatId) + (c.username ? " — @" + String(c.username).replace(/^@/, "") : "") + "\n   👤 " + ((u && u.rapName) || c.userId) + " · 👥 " + (c.members || 0) + (chPosts ? " · 📨 " + chPosts + " پیام فعال" : "") + (c.lastError ? " · ⚠️ " + truncate_(c.lastError, 40) : ""));
     kb.push([
       { text: (sel.indexOf(c.id) >= 0 ? "☑️ " : "⬜️ ") + truncate_(c.title || c.chatId, 20), callback_data: "acc:sel:" + c.id + ":" + p },
@@ -9098,6 +9293,7 @@ function showCcPostsList_(chatId, uid, page, filterType) {
   clearSession_("M:" + uid);
   const filter = String(filterType || "all");
   const allActive = getActiveCcPosts_().filter(function(p) {
+    if (p.sourceType === "cover_notify") return false;
     if (filter === "banner") return p.sourceType === "banner";
     if (filter === "message") return p.sourceType !== "banner";
     return true;
@@ -9209,7 +9405,7 @@ function showCcChannelPosts_(chatId, uid, channelId, page) {
     showAdminConnectedChannels_(chatId, uid, 0);
     return;
   }
-  const posts = getActiveCcPosts_().filter(function(p) { return p.channelId === String(channelId) || p.chatId === String(ch.chatId); })
+  const posts = getActiveCcPosts_().filter(function(p) { return p.sourceType !== "cover_notify" && (p.channelId === String(channelId) || p.chatId === String(ch.chatId)); })
     .sort(function(a, b) { return dateMillis_(b.createdAt) - dateMillis_(a.createdAt); });
   if (!posts.length) {
     sendMessage_(chatId, "📺 «" + (ch.title || ch.chatId) + "»\nهیچ پیام فعالی از طرف بات در این کانال ثبت نشده است.", {
@@ -9310,7 +9506,7 @@ function handleCcPostsCallback_(cb) {
   if (action === "delchall") {
     const channelId = parts[2] || "";
     const ch = getConnectedChannelById_(channelId);
-    const posts = getActiveCcPosts_().filter(function(p) { return p.channelId === String(channelId) || (ch && p.chatId === String(ch.chatId)); });
+    const posts = getActiveCcPosts_().filter(function(p) { return p.sourceType !== "cover_notify" && (p.channelId === String(channelId) || (ch && p.chatId === String(ch.chatId))); });
     let okCount = 0; let failCount = 0;
     posts.forEach(function(p) {
       const r = deleteCcPostRecord_(p);
