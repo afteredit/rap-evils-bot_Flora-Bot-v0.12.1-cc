@@ -1417,6 +1417,10 @@ function enableWorkers() {
 }
 function disableWorkers() { disableWorkerTriggers_(); SpreadsheetApp.getActive().toast("پردازش صف‌ها متوقف شد.", "Flora Bot", 5); }
 // نصب/بازسازی همهٔ تریگرهای لازم (از منوی مدیر و اسکریپت‌ادیتور قابل اجراست)
+function safeGetProjectTriggers_() {
+  try { return ScriptApp.getProjectTriggers() || []; }
+  catch (e) { console.warn("[FloraBot] safeGetProjectTriggers_: " + (e && e.message || e)); return null; }
+}
 function installTriggers_() {
   const wanted = {
     publishQueueJob: String(getSetting_("QUEUE_ENABLED") || "true") === "true",
@@ -1440,11 +1444,15 @@ function installTriggers_() {
   });
   if (String(getSetting_("BACKUP_ENABLED") || "false") === "true") ensureWeeklyBackupTrigger_();
   else removeTrigger_("weeklyBackupJob");
-  return ScriptApp.getProjectTriggers().map(function(t) { return t.getHandlerFunction(); });
+  try { CacheService.getScriptCache().put("workers_ready_ok", "1", 21600); } catch (e) {}
+  return (safeGetProjectTriggers_() || []).map(function(t) { return t.getHandlerFunction(); });
 }
 function disableWorkerTriggers_() {
-  ScriptApp.getProjectTriggers().forEach(function(t) {
-    if (["publishQueueJob", "broadcastQueueJob"].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
+  try { CacheService.getScriptCache().remove("workers_ready_ok"); } catch (e) {}
+  (safeGetProjectTriggers_() || []).forEach(function(t) {
+    if (["publishQueueJob", "broadcastQueueJob"].indexOf(t.getHandlerFunction()) >= 0) {
+      try { ScriptApp.deleteTrigger(t); } catch (e) {}
+    }
   });
 }
 function runWorkersNow() { publishQueueJob(); broadcastQueueJob(); SpreadsheetApp.getActive().toast("صف‌ها بررسی شدند.", "Flora Bot", 5); }
@@ -1536,10 +1544,17 @@ function logError_(where, err, extra) {
 function notifyAdminError_(where, err) {
   try {
     if (String(getSetting_("ADMIN_ERROR_NOTIFY") || "true") !== "true") return;
-    // ضد سیل: حداکثر هر ۵ دقیقه یک پیام خطا برای مدیر
+    const rawMsg = String(err && err.message || err || "");
+    if (/Unable to talk to trigger service/i.test(rawMsg)) return;
+    // ضد سیل: حداکثر هر ۵ دقیقه یک پیام خطا برای مدیر (در حافظه و CacheService بین اجراها)
     if (nowMs_() - LAST_ERROR_NOTIFY_MEMO_ < 5 * 60000) return;
+    try {
+      const cache = CacheService.getScriptCache();
+      if (cache.get("err_notify_lock")) return;
+      cache.put("err_notify_lock", "1", 300);
+    } catch (ce) {}
     LAST_ERROR_NOTIFY_MEMO_ = nowMs_();
-    const text = "⚠️ خطای اجرایی\n📍 " + truncate_(where || "?", 90) + "\n🕐 " + formatDate_(new Date()) + "\n💬 " + truncate_(String(err && err.message || err || ""), 350);
+    const text = "⚠️ خطای اجرایی\n📍 " + truncate_(where || "?", 90) + "\n🕐 " + formatDate_(new Date()) + "\n💬 " + truncate_(rawMsg, 350);
     getAdmins_().forEach(function(a) { try { sendMessage_(a, text); } catch (e) {} });
   } catch (e) { console.error("notifyAdminError_: " + e); }
 }
@@ -1649,11 +1664,25 @@ function withDocLock_(fn) {
 }
 
 // ───────────────────────── کاربران / رمز / شناسایی ─────────────────────────
+function isArtistButtonPlaceholder_(value) {
+  const s = String(value || "").replace(/^[\s👤✍️🎤•\-:：()«»"']+|[\s👤✍️🎤•\-:：()«»"']+$/g, "").trim();
+  if (!s) return false;
+  return /^(?:دریافت(?:\s*شده)?\s*از\s*پروفایل|وارد\s*کردن\s*دستی|from\s*profile|taken\s*from\s*profile|enter\s*manually)$/i.test(s);
+}
+function sanitizeArtistName_(value) {
+  let s = String(value || "").trim();
+  if (!s) return "";
+  s = s.replace(/\s*\(\s*(?:دریافت(?:\s*شده)?\s*از\s*پروفایل|from\s*profile|taken\s*from\s*profile)\s*\)\s*/gi, " ").trim();
+  s = s.replace(/^(?:👤\s*)?(?:دریافت(?:\s*شده)?\s*از\s*پروفایل|from\s*profile|taken\s*from\s*profile)$/i, "").trim();
+  s = s.replace(/^(?:✍️\s*)?(?:وارد\s*کردن\s*دستی|enter\s*manually)$/i, "").trim();
+  if (isArtistButtonPlaceholder_(s)) return "";
+  return s;
+}
 function userFromRow_(r, i) {
   const truthy = function(v) { return v === true || String(v).toLowerCase() === "true"; };
   return {
     rowNumber: i + 2, userId: String(r[0] || ""), phone: String(r[1] || ""),
-    firstName: String(r[2] || ""), lastName: String(r[3] || ""), rapName: String(r[4] || ""),
+    firstName: String(r[2] || ""), lastName: String(r[3] || ""), rapName: sanitizeArtistName_(r[4] || ""),
     province: String(r[5] || ""), city: String(r[6] || ""), country: String(r[7] || ""), metaJson: String(r[25] || ""),
     passSalt: String(r[8] || ""), passHash: String(r[9] || ""), registeredAt: r[10] || "", lastSeen: r[11] || "",
     active: truthy(r[12]), blocked: truthy(r[13]), username: String(r[14] || ""),
@@ -1948,7 +1977,7 @@ function adminPermissionForCallback_(data) {
   if (d === "a:adminlog" || d === "a:errors" || d.indexOf("a:export:") === 0) return "settings";
   if (d === "a:admins" || d.indexOf("a:admin") === 0) return "admins";
   if (d === "a:users" || d.indexOf("a:list:") === 0 || d.indexOf("a:user:") === 0 || d.indexOf("u:") === 0 || d === "a:resets" || d.indexOf("a:reset:") === 0 || d.indexOf("r:approve:") === 0 || d.indexOf("r:reject:") === 0) return "users";
-  if (d === "a:submissions" || d.indexOf("a:sub") === 0 || d.indexOf("a:downloadtoggle:") === 0 || d.indexOf("a:comingsoon") === 0) return "submissions";
+  if (d === "a:submissions" || d.indexOf("a:sub") === 0 || d.indexOf("a:downloadtoggle:") === 0 || d.indexOf("a:comingsoon") === 0 || d.indexOf("a:freestyle") === 0 || d.indexOf("a:delapprove:") === 0 || d.indexOf("a:delreject:") === 0) return "submissions";
   if (d === "a:support" || d.indexOf("support:") === 0) return "support";
   if (d === "a:channel" || d === "a:comments" || d === "a:postbuttons" || d === "a:covertest" || d === "set:channel" || d === "set:footer" || d === "set:mode" || d.indexOf("set:mode:") === 0 || d === "set:interval" || d === "set:pubtoggle") return "channel";
   if (d === "a:settings" || d === "a:texts" || d.indexOf("set:") === 0 || d === "a:colors" || d.indexOf("color:") === 0 || d === "a:fj" || d.indexOf("fj:") === 0 || d === "a:inactive" || d.indexOf("set:inactive-") === 0 || d === "a:botmode" || d.indexOf("botmode:") === 0) return "settings";
@@ -2477,13 +2506,28 @@ function handleMessage_(message) {
   } else if (!rateAllow_("msg:" + uid, getSetting_("RATE_MSG_PER_MIN") || 25, 60)) {
     sendMessage_(chatId, t_(uid, "RATE_LIMITED")); return;
   }
-  const session = getSession_("M:" + uid); const admin = isAdmin_(uid);
+  let session = getSession_("M:" + uid); const admin = isAdmin_(uid);
   const authState = !!session && /^(AUTH_|REG_|LOGIN_|FORGOT_|MFA_)/.test(session.state);
   if (isCancelText_(text)) {
     if (admin && !isAdminAuthenticated_(uid)) { clearSession_("M:" + uid); requireAdminAuthentication_(chatId, uid, t_(uid, "ADMIN_LOGIN_CANCELLED")); return; }
     cancelCurrentFlow_(message, session, admin); return;
   }
   if (authState) { handleAuthMessage_(message, session); return; }
+  // اگر مدیر یا کاربر دکمهٔ منوی اصلی را زده باشد، در حالت‌های ویرایش/کانال/پشتیبانی گیر نکند
+  if (admin && isAdminAuthenticated_(uid) && isAdminMenuButtonText_(text)) {
+    if (isAdminSessionStale_(uid)) {
+      logoutUser_(uid); clearSession_("M:" + uid);
+      requireAdminAuthentication_(chatId, uid, t_(uid, "ADMIN_SESSION_EXPIRED")); return;
+    }
+    touchAdminSession_(uid);
+    if (session && String(session.state).indexOf("MUSIC_") === 0) cancelMusicDraft_(uid, session);
+    else if (session) clearSession_("M:" + uid);
+    handleAdminMenuMessage_(message); return;
+  }
+  if (!admin && session && isUserMenuButtonText_(text) && String(session.state).indexOf("MUSIC_") !== 0) {
+    clearSession_("M:" + uid);
+    session = null;
+  }
   if (session && session.state === "USR_WITHDRAW_CONFIRM") { handleWithdrawConfirm_(message, session); return; }
   if (session && String(session.state).indexOf("USR_EDIT_") === 0) {
     if (!isLoggedIn_(uid)) { clearSession_("M:" + uid); sendEntryCard_(chatId, t_(uid, "LOGIN_NEEDED")); return; }
@@ -2553,6 +2597,33 @@ function handleMessage_(message) {
   if (text === "📞 پشتیبانی" || text === MSG.en.BTN_SUPPORT) { startUserSupport_(chatId, uid); return; }
   handleUserMenuMessage_(message, u);
 }
+function isAdminMenuButtonText_(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (typeof isAdminMenuButton_ === "function" && isAdminMenuButton_(t)) return true;
+  return [
+    "👥 کاربران", "🎵 ارسال‌ها", "🗓 صف انتشار", "⏳ Coming Soon", "🎤 فری‌استایل", "🎤 فری‌استایل‌ها",
+    "📢 کانال‌های وصل‌شده", "🖼 بنر تبلیغاتی", "📣 پیام همگانی", "📣 ارسال همگانی", "💬 پشتیبانی",
+    "📺 کانال", "📝 متن‌ها", "⚙️ تنظیمات", "🎨 دکمه‌ها و رنگ‌ها",
+    "🌐 عضویت اجباری", "🔐 عضویت اجباری", "😴 غیرفعال‌ها", "🆘 درخواست‌های رمز", "🔑 رمزهای فراموش‌شده",
+    "🛡 دسترسی مدیران", "👮 مدیران", "🚦 وضعیت ربات", "📊 آمار", "🧹 نگهداری و بکاپ", "📚 آثار من"
+  ].indexOf(t) >= 0;
+}
+function isUserMenuButtonText_(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  return [
+    tr_("BTN_SEND_MUSIC", null, "fa"), MSG.en.BTN_SEND_MUSIC,
+    tr_("BTN_SEND_ALBUM", null, "fa"), MSG.en.BTN_SEND_ALBUM,
+    tr_("BTN_COMING_SOON", null, "fa"), MSG.en.BTN_COMING_SOON,
+    tr_("BTN_FREESTYLE", null, "fa"), MSG.en.BTN_FREESTYLE, "🎤 فری‌استایل",
+    tr_("BTN_MY_WORKS", null, "fa"), MSG.en.BTN_MY_WORKS,
+    tr_("BTN_MY_CHANNELS", null, "fa"), MSG.en.BTN_MY_CHANNELS,
+    tr_("BTN_PROFILE", null, "fa"), MSG.en.BTN_PROFILE,
+    tr_("BTN_SUPPORT", null, "fa"), MSG.en.BTN_SUPPORT, "📞 پشتیبانی",
+    tr_("BTN_LOGOUT", null, "fa"), MSG.en.BTN_LOGOUT
+  ].indexOf(t) >= 0;
+}
 function adminEntry_(chatId, uid) {
   if (!isAdminAuthenticated_(uid)) { requireAdminAuthentication_(chatId, uid); return; }
   if (isAdminSessionStale_(uid)) { logoutUser_(uid); requireAdminAuthentication_(chatId, uid, t_(uid, "ADMIN_SESSION_EXPIRED")); return; }
@@ -2564,10 +2635,17 @@ function adminEntry_(chatId, uid) {
 function handleCallbackQuery_(cb) {
   if (!cb || !cb.from) return;
   const uid = String(cb.from.id); const data = String(cb.data || ""); const chatId = cb.message && cb.message.chat ? String(cb.message.chat.id) : uid;
-  if (!isAdmin_(uid) && isLoggedIn_(uid) && getUserById_(uid)) {
-    touchUser_(uid);
-    verifyUserConnectedChannelsBanner_(uid, chatId);
+  const shouldCheckUserBanner = !isAdmin_(uid) && isLoggedIn_(uid) && !!getUserById_(uid);
+  if (shouldCheckUserBanner) touchUser_(uid);
+  try {
+    dispatchCallbackQuery_(cb, uid, data, chatId);
+  } finally {
+    if (shouldCheckUserBanner) {
+      try { verifyUserConnectedChannelsBanner_(uid, chatId); } catch (e) {}
+    }
   }
+}
+function dispatchCallbackQuery_(cb, uid, data, chatId) {
   if (data === "fj:check") { handleJoinCallback_(cb); return; }
   if (data.indexOf("lg:") === 0) {
     const lang = data.split(":")[1] || "fa";
@@ -4281,12 +4359,22 @@ function getMaxAudioMb_() { return Math.max(1, Math.min(200, Number(getSetting_(
 function startMusicFlow_(chatId, uid, mode) {
   if (ccGateRequired_(uid)) { showConnectedGate_(chatId, uid); return; }
   const user = getUserById_(uid);
-  if (!user) { sendEntryCard_(chatId); return; }
+  if (!user && !isAdmin_(uid)) { sendEntryCard_(chatId); return; }
   const active = getSession_("M:" + uid);
   if (active && String(active.state).indexOf("MUSIC_") === 0) {
     const draft = getMusicDraft_((active.data || {}).draftId);
-    if (draft && draft.status === "open") { sendMessage_(chatId, t_(uid, "DRAFT_OPEN")); return; }
-    clearSession_("M:" + uid);
+    if (draft && draft.status === "open") {
+      const hasMedia = getDraftMedia_(draft.draftId).length > 0;
+      const hasTitle = !!String((draft.data || {}).title || "").trim();
+      if (!hasMedia && !hasTitle) {
+        cancelMusicDraft_(uid, active);
+      } else {
+        sendMessage_(chatId, t_(uid, "DRAFT_OPEN"), musicStepKeyboard_(uid, active.state, draft.mode));
+        return;
+      }
+    } else {
+      clearSession_("M:" + uid);
+    }
   }
   const recent = getAllSubmissions_().filter(function(s) { return String(s.userId) === uid && dateMillis_(s.createdAt) > nowMs_() - 86400000; }).length;
   const dailyLimit = Number(getSetting_("MAX_SUBMISSIONS_PER_DAY") || 5);
@@ -4464,7 +4552,12 @@ function musicStepKeyboard_(uid, step, mode) {
     rows.push([{ text: tr_("BTN_NEXT", null, lang) }]);
   }
   else if (st === "MUSIC_ARTISTS") {
-    rows.push([{ text: tr_("BTN_ARTIST_PROFILE", null, lang), }, { text: tr_("BTN_ARTIST_MANUAL", null, lang) }]);
+    const profileRap = sanitizeArtistName_((getUserById_(uid) || {}).rapName || "");
+    if (profileRap) {
+      rows.push([{ text: tr_("BTN_ARTIST_PROFILE", null, lang) }, { text: tr_("BTN_ARTIST_MANUAL", null, lang) }]);
+    } else {
+      rows.push([{ text: tr_("BTN_ARTIST_MANUAL", null, lang) }]);
+    }
     rows.push([{ text: tr_("BTN_NEXT", null, lang) }]);
   }
   else if (st === "MUSIC_TITLE") rows.push([{ text: tr_("BTN_NEXT", null, lang) }]);
@@ -4503,7 +4596,8 @@ function stepPrompt_(uid, draft, step) {
   if (st === "MUSIC_COVER") return coverStepPrompt_(uid, draft);
   if (st === "MUSIC_AUDIO") return audioStepPrompt_(uid, draft);
   const suggestedTitle = d.title || String(firstCaptionLine_(getDraftMedia_(draft.draftId)) || "").trim();
-  const userName = (getUserById_(uid) || {}).rapName || "";
+  const userName = sanitizeArtistName_((getUserById_(uid) || {}).rapName || "");
+  const currentArtists = sanitizeArtistName_(d.artists || "");
   if (step === "MUSIC_TITLE") {
     return "📀 " + (lang === "en" ? "Send the track title." : "عنوان موزیک را بفرست.")
       + (suggestedTitle ? "\n\n" + (lang === "en" ? "Suggested: " : "پیشنهاد: ") + "«" + suggestedTitle + "»" : "");
@@ -4512,10 +4606,10 @@ function stepPrompt_(uid, draft, step) {
     // دو گزینه: دریافت از پروفایل یا ورود دستی. برای کاربران قدیمی با rapName خالی، پیام یکباره.
     if (!String(userName||"").trim()) {
       return "🎤 " + (lang === "en" ? "Your profile has no artist name. Please enter it once to save:" : "🎤 نام هنری شما در پروفایل ثبت نشده. لطفاً برای یکبار نام هنری خود را وارد کن تا در پروفایل ذخیره شود:")
-        + (d.artists ? "\n\n" + (lang === "en" ? "Current: " : "فعلی: ") + "«" + d.artists + "»" : "");
+        + (currentArtists ? "\n\n" + (lang === "en" ? "Current: " : "فعلی: ") + "«" + currentArtists + "»" : "");
     }
     return "🎤 " + (lang === "en" ? "Send the artist name(s). You can use «Artist: A & B»." : "نام هنرمند(ها) را بفرست. می‌توانی از «هنرمند: …» هم استفاده کنی.")
-      + (d.artists ? "\n\n" + (lang === "en" ? "Current: " : "فعلی: ") + "«" + d.artists + "»" : userName ? "\n\n" + (lang === "en" ? "Suggested: " : "پیشنهاد: ") + "«" + userName + "»" : "")
+      + (currentArtists ? "\n\n" + (lang === "en" ? "Current: " : "فعلی: ") + "«" + currentArtists + "»" : userName ? "\n\n" + (lang === "en" ? "Suggested: " : "پیشنهاد: ") + "«" + userName + "»" : "")
       + "\n\n" + tr_("BTN_ARTIST_PROFILE", null, lang) + " / " + tr_("BTN_ARTIST_MANUAL", null, lang);
   }
   if (step === "MUSIC_FEAT") return "🎧 " + (lang === "en" ? "Featuring artist(s)? Send names or tap Skip." : "هنرمند همراه (feat) داری؟ نام را بفرست یا «⏭ رد کردن» را بزن.");
@@ -4568,7 +4662,7 @@ function validateCoverStep_(chatId, uid, draft) {
   draft.data.noCover = !covers.length;
   // عنوان پیشنهادی از کپشن اولین رسانه (بدون اجبار)
   if (!draft.data.title) draft.data.title = String(firstCaptionLine_(media) || "").trim();
-  if (!draft.data.artists) draft.data.artists = String((getUserById_(uid) || {}).rapName || "").trim();
+  draft.data.artists = sanitizeArtistName_(draft.data.artists || (getUserById_(uid) || {}).rapName || "");
   saveMusicDraft_(draft);
   return true;
 }
@@ -4595,6 +4689,7 @@ function advanceMusicStep_(chatId, uid, draft, session, force) {
     sendMessage_(chatId, t_(uid, "SUBMIT_TITLE_ASK"), musicStepKeyboard_(uid, "MUSIC_TITLE", draft.mode));
     return;
   }
+  draft.data.artists = sanitizeArtistName_(draft.data.artists || "");
   if (step === "MUSIC_ARTISTS" && !String(draft.data.artists || "").trim()) {
     sendMessage_(chatId, t_(uid, "SUBMIT_ARTIST_ASK"), musicStepKeyboard_(uid, "MUSIC_ARTISTS", draft.mode));
     return;
@@ -4655,9 +4750,20 @@ function handleMusicMessage_(message, session) {
     sendMessage_(chatId, t_(uid, "STEP_MEDIA_WRONG_STAGE", { s: stepLabel_(uid, state), w: stepAcceptLabel_(uid, state) }), musicStepKeyboard_(uid, state, draft.mode));
     return;
   }
-  // اگر کاربر وسط پیش‌نویس دکمهٔ منو را بزند، به‌جای تفسیر آن به‌عنوان لینک راهنمایی می‌شود.
-  const menuButtonTexts = ["🎵 ارسال موزیک", "🎼 ارسال آلبوم", "⏳ Coming Soon", "🎤 فری‌استایل", MSG.en.BTN_FREESTYLE, "📚 آثار من", "📞 پشتیبانی", "👤 پروفایل", "🚪 خروج", "🟡 ثبت‌نام / ورود", "🆘 فراموشی رمز", MSG.en.BTN_SEND_MUSIC, MSG.en.BTN_SEND_ALBUM, MSG.en.BTN_MY_WORKS, MSG.en.BTN_PROFILE, MSG.en.BTN_LOGOUT, MSG.en.BTN_SUPPORT, "🎵 ارسال‌ها", "⚙️ تنظیمات"];
-  if (menuButtonTexts.indexOf(text) >= 0) { sendMessage_(chatId, t_(uid, "DRAFT_MENU_HINT"), musicStepKeyboard_(uid, state)); return; }
+  // اگر کاربر وسط پیش‌نویس دکمهٔ منو را بزند، اگر پیش‌نویس هنوز خالی است خودکار لغو و به منو می‌رود؛
+  // وگرنه کیبورد مرحله (همراه با دکمهٔ لغو) دوباره نمایش داده می‌شود.
+  const menuButtonTexts = ["🎵 ارسال موزیک", "🎼 ارسال آلبوم", "⏳ Coming Soon", "🎤 فری‌استایل", MSG.en.BTN_FREESTYLE, "📚 آثار من", "🎼 آثار من", "📢 کانال‌های من", MSG.fa.BTN_MY_CHANNELS, MSG.en.BTN_MY_CHANNELS, "📞 پشتیبانی", "👤 پروفایل", "🚪 خروج", "🟡 ثبت‌نام / ورود", "🆘 فراموشی رمز", MSG.en.BTN_SEND_MUSIC, MSG.en.BTN_SEND_ALBUM, MSG.en.BTN_MY_WORKS, MSG.en.BTN_PROFILE, MSG.en.BTN_LOGOUT, MSG.en.BTN_SUPPORT, "🎵 ارسال‌ها", "⚙️ تنظیمات"];
+  if (menuButtonTexts.indexOf(text) >= 0) {
+    const hasMedia = getDraftMedia_(draft.draftId).length > 0;
+    const hasTitle = !!String((draft.data || {}).title || "").trim();
+    if (!hasMedia && !hasTitle) {
+      cancelMusicDraft_(uid, session);
+      if (isAdmin_(uid) && isAdminAuthenticated_(uid)) { handleAdminMenuMessage_(message); return; }
+      const usr = getUserById_(uid);
+      if (usr) { handleUserMenuMessage_(message, usr); return; }
+    }
+    sendMessage_(chatId, t_(uid, "DRAFT_MENU_HINT"), musicStepKeyboard_(uid, state, draft.mode)); return;
+  }
   // در مراحل عنوان/هنرمند/فیچرینگ فقط کلیدهای شناخته‌شده تفسیر می‌شوند؛
   // پس «Intro: Dawn» عیناً عنوان می‌شود و به‌عنوان «عوامل» بلعیده نمی‌شود.
   const strictState = ["MUSIC_TITLE", "MUSIC_ARTISTS", "MUSIC_FEAT"].indexOf(state) >= 0;
@@ -4694,9 +4800,11 @@ function handleMusicMessage_(message, session) {
   if (state === "MUSIC_ARTISTS") {
     const btnProfile = tr_("BTN_ARTIST_PROFILE", null, lang);
     const btnManual = tr_("BTN_ARTIST_MANUAL", null, lang);
+    const isProfileBtn = text === btnProfile || text === t_(uid, "BTN_ARTIST_PROFILE") || text === MSG.fa.BTN_ARTIST_PROFILE || text === MSG.en.BTN_ARTIST_PROFILE || /^(?:👤\s*)?(?:دریافت(?:\s*شده)?\s*از\s*پروفایل|from\s*profile|taken\s*from\s*profile)$/i.test(text);
+    const isManualBtn = text === btnManual || text === t_(uid, "BTN_ARTIST_MANUAL") || text === MSG.fa.BTN_ARTIST_MANUAL || text === MSG.en.BTN_ARTIST_MANUAL || /^(?:✍️\s*)?(?:وارد\s*کردن\s*دستی|enter\s*manually)$/i.test(text);
     // انتخاب از پروفایل
-    if (text === btnProfile) {
-      const rap = String((getUserById_(uid) || {}).rapName || "").trim();
+    if (isProfileBtn) {
+      const rap = sanitizeArtistName_((getUserById_(uid) || {}).rapName || "");
       if (!rap) {
         sendMessage_(chatId, tr_("ARTIST_PROFILE_MISSING", null, lang), musicStepKeyboard_(uid, state, draft.mode));
         return;
@@ -4707,26 +4815,32 @@ function handleMusicMessage_(message, session) {
       setSession_("M:" + uid, "MUSIC_FEAT", { draftId: draft.draftId });
       sendMessage_(chatId, stepPrompt_(uid, draft, "MUSIC_FEAT"), musicStepKeyboard_(uid, "MUSIC_FEAT", draft.mode)); return;
     }
-    if (text === btnManual) {
+    if (isManualBtn) {
       sendMessage_(chatId, tr_("ARTIST_MANUAL_PROMPT", null, lang), musicStepKeyboard_(uid, state, draft.mode));
       return;
     }
-    const artists = truncate_(stripLinks_(meta && meta.artists ? String(meta.artists) : text), 80);
+    const rawArtists = truncate_(stripLinks_(meta && meta.artists ? String(meta.artists) : text), 80);
+    const artists = sanitizeArtistName_(rawArtists);
     if (artists.length < 2) { sendMessage_(chatId, t_(uid, "SUBMIT_ARTIST_ASK"), musicStepKeyboard_(uid, state, draft.mode)); return; }
     draft.data.artists = artists;
-    // برای کاربران قدیمی با rapName خالی: همین ورودی دستی را در پروفایل ذخیره کن (یک بار)
+    // برای کاربران قدیمی با rapName خالی یا 오염‌شده: همین ورودی دستی را در پروفایل ذخیره کن
     try {
       const u = getUserById_(uid);
-      if (u && !String(u.rapName||"").trim()) { withLock_(function(){ setUserField_(uid, "rapName", truncate_(artists,60)); }); }
+      if (u && !sanitizeArtistName_(u.rapName || "")) { withLock_(function(){ setUserField_(uid, "rapName", truncate_(artists,60)); }); }
     } catch(e){}
     saveMusicDraft_(draft);
     setSession_("M:" + uid, "MUSIC_FEAT", { draftId: draft.draftId });
     sendMessage_(chatId, stepPrompt_(uid, draft, "MUSIC_FEAT"), musicStepKeyboard_(uid, "MUSIC_FEAT", draft.mode)); return;
   }
   if (state === "MUSIC_FEAT") {
+    // اگر کاربر دو بار روی «👤 دریافت از پروفایل» یا «✍️ وارد کردن دستی» زده باشد، نباید به‌عنوان feat ذخیره شود
+    if (isArtistButtonPlaceholder_(text)) {
+      sendMessage_(chatId, stepPrompt_(uid, draft, "MUSIC_FEAT"), musicStepKeyboard_(uid, "MUSIC_FEAT", draft.mode));
+      return;
+    }
     // نام همراه ذخیره می‌شود ولی مرحله عوض نمی‌شود تا کاربر «بعدی» را بزند؛
     // قبلاً خودکار می‌رفت و تستِ «Elio → بعدی → عوامل» یک مرحله جلو می‌افتاد.
-    const feat = truncate_(stripLinks_(meta && meta.featuring ? String(meta.featuring) : text), 80);
+    const feat = sanitizeArtistName_(truncate_(stripLinks_(meta && meta.featuring ? String(meta.featuring) : text), 80));
     if (!feat) { sendMessage_(chatId, stepPrompt_(uid, draft, "MUSIC_FEAT"), musicStepKeyboard_(uid, "MUSIC_FEAT")); return; }
     draft.data.featuring = feat; saveMusicDraft_(draft);
     sendMessage_(chatId, "✅ ذخیره شد: 🎧 همراه «" + feat + "»\nبرای ادامه «➡️ مرحلهٔ بعد» را بزن.", musicStepKeyboard_(uid, "MUSIC_FEAT")); return;
@@ -5275,7 +5389,11 @@ function enqueueMusicDeletion_(userId, submissionId, messageIds, deleteAfterMs) 
   // برای جلوگیری از انفجار تریگرها، اگر تریگر فعالی هست به آن اکتفا می‌کنیم؛ وگرنه یکی می‌سازیم.
   if (!findTriggersByHandler_("deleteExpiredMusicDeliveries_").length) scheduleMusicDeletionTrigger_(deleteAfter);
 }
-function findTriggersByHandler_(handler) { return ScriptApp.getProjectTriggers().filter(function(t) { return t.getHandlerFunction() === handler; }); }
+function findTriggersByHandler_(handler) {
+  const list = safeGetProjectTriggers_();
+  if (!list) return [];
+  return list.filter(function(t) { try { return t.getHandlerFunction() === handler; } catch (e) { return false; } });
+}
 function pruneTrigger_(handler, keepAtMost) {
   const list = findTriggersByHandler_(handler);
   const max = Math.max(1, Number(keepAtMost) || 1);
@@ -5291,7 +5409,11 @@ function scheduleMusicDeletionTrigger_(when) {
   // حالا اول می‌سازیم و بعد فقط قدیمی‌ترها را نگه می‌داریم (کمترین فاصله تا اجرا).
   let created = null;
   try { created = ScriptApp.newTrigger("deleteExpiredMusicDeliveries_").timeBased().after(delay).create(); }
-  catch (e) { logError_("scheduleMusicDeletionTrigger_", e); }
+  catch (e) {
+    if (!/Unable to talk to trigger service/i.test(String(e && e.message || e || ""))) {
+      logError_("scheduleMusicDeletionTrigger_", e);
+    }
+  }
   // حداکثر ۲ تریگر کافی است؛ بقیه پاک می‌شوند (سهمیهٔ ۲۰ تریگر).
   const list = findTriggersByHandler_("deleteExpiredMusicDeliveries_");
   for (let i = 0; i < list.length - 2; i++) { try { ScriptApp.deleteTrigger(list[i]); } catch (e) {} }
@@ -5304,7 +5426,7 @@ function deleteExpiredMusicDeliveries_(e) {
   const selfUid = e && e.triggerUid ? String(e.triggerUid) : "";
   if (selfUid) {
     try {
-      ScriptApp.getProjectTriggers().forEach(function(t) {
+      (safeGetProjectTriggers_() || []).forEach(function(t) {
         try { if (String(t.getUniqueId && t.getUniqueId() || "") === selfUid) ScriptApp.deleteTrigger(t); } catch (err) {}
       });
     } catch (err) {}
@@ -5399,13 +5521,13 @@ function handleMusicDownloadDelivery_(chatId, uid, trackIdOrSubmissionId) {
 //   ❤️ اگر این آهنگ را دوست داشتی، ... (CHANNEL_FOOTER)
 function platformMeta_(key) { return POST_LINK_PLATFORMS.find(function(p) { return p.key === String(key); }) || { key: String(key), label: String(key), emoji: "🔗" }; }
 function splitArtists_(value) {
-  return String(value || "").split(/\s*(?:,|،|\/|&|\+|\band\b|\bfeat\.?\b|\bft\.?\b|\bwith\b)\s*/i).map(function(x) { return String(x || "").trim(); }).filter(Boolean);
+  return String(value || "").split(/\s*(?:,|،|\/|&|\+|\band\b|\bfeat\.?\b|\bft\.?\b|\bwith\b)\s*/i).map(function(x) { return sanitizeArtistName_(x); }).filter(Boolean);
 }
-function joinArtistsAmp_(value) { const list = splitArtists_(value); return list.length ? list.join(" & ") : String(value || "").trim(); }
+function joinArtistsAmp_(value) { const list = splitArtists_(value); return list.length ? list.join(" & ") : sanitizeArtistName_(value); }
 // نام هنرمندان برای نمایش در پیام‌ها؛ فهرست‌ها با «،» و «&» جدا می‌شوند.
 function formatArtistNames_(value) {
   const list = splitArtists_(value);
-  if (!list.length) return String(value || "").trim();
+  if (!list.length) return sanitizeArtistName_(value);
   return list.join(" ، ");
 }
 function cleanHashtag_(text) { return String(text || "").replace(/[^A-Za-z0-9_\u0600-\u06FF\u200c]/g, "").slice(0, 32); }
@@ -5921,14 +6043,29 @@ function publishQueueJob() {
   } catch (e) { logError_("publishQueueJob", e); }
   finally { try { lock.releaseLock(); } catch (e2) {} }
 }
-function ensureWorkersReady_() {
-  const triggers = ScriptApp.getProjectTriggers().map(function(t) { return t.getHandlerFunction(); });
-  if (triggers.indexOf("publishQueueJob") < 0) {
-    if (String(getSetting_("QUEUE_ENABLED") || "true") === "true") ScriptApp.newTrigger("publishQueueJob").timeBased().everyMinutes(1).create();
+function ensureWorkersReady_(force) {
+  try {
+    const cache = CacheService.getScriptCache();
+    if (!force && cache.get("workers_ready_ok")) return;
+    const raw = safeGetProjectTriggers_();
+    if (!raw) return;
+    const triggers = raw.map(function(t) { try { return t.getHandlerFunction(); } catch (e) { return ""; } });
+    if (triggers.indexOf("publishQueueJob") < 0) {
+      if (String(getSetting_("QUEUE_ENABLED") || "true") === "true") {
+        try { ScriptApp.newTrigger("publishQueueJob").timeBased().everyMinutes(1).create(); } catch (e) {}
+      }
+    }
+    if (triggers.indexOf("broadcastQueueJob") < 0) {
+      try { ScriptApp.newTrigger("broadcastQueueJob").timeBased().everyMinutes(5).create(); } catch (e) {}
+    }
+    if (triggers.indexOf("cleanupJob") < 0) {
+      try { ScriptApp.newTrigger("cleanupJob").timeBased().everyHours(6).create(); } catch (e) {}
+    }
+    if (String(getSetting_("BACKUP_ENABLED") || "false") === "true") ensureWeeklyBackupTrigger_();
+    cache.put("workers_ready_ok", "1", 21600);
+  } catch (e) {
+    console.warn("[FloraBot] ensureWorkersReady_: " + (e && e.message || e));
   }
-  if (triggers.indexOf("broadcastQueueJob") < 0) ScriptApp.newTrigger("broadcastQueueJob").timeBased().everyMinutes(5).create();
-  if (triggers.indexOf("cleanupJob") < 0) ScriptApp.newTrigger("cleanupJob").timeBased().everyHours(6).create();
-  if (String(getSetting_("BACKUP_ENABLED") || "false") === "true") ensureWeeklyBackupTrigger_();
 }
 // اگر STAGING_CHANNEL_ID تنظیم شده باشد، انتشار آزمایشی اول به آنجا می‌رود تا ادمین پیش‌نمایش واقعی ببیند.
 function resolvePublishChannel_(forPreview) {
@@ -7229,7 +7366,8 @@ function showStatsPanel_(chatId, uid) {
   const byStatus = {}; subs.forEach(function(s) { byStatus[s.status] = (byStatus[s.status] || 0) + 1; });
   const lib = getMusicLibrary_();
   const downloads = lib.reduce(function(sum, t) { return sum + (Number(t.downloadCount) || 0); }, 0);
-  const triggers = ScriptApp.getProjectTriggers().length;
+  const rawTriggers = safeGetProjectTriggers_();
+  const triggers = rawTriggers ? rawTriggers.length : "—";
   const lines = ["📊 آمار", "👥 کاربران: " + users.length + " (فعال " + users.filter(function(u) { return u.active && !u.blocked; }).length + (users.filter(function(u) { return u.botBlocked; }).length ? " · بلاک‌کرده " + users.filter(function(u) { return u.botBlocked; }).length : "") + ")",
     "🎵 ارسال‌ها: " + subs.length, "⏳ در انتظار: " + (byStatus.pending || 0), "🗓 صف: " + ((byStatus.approved || 0) + (byStatus.publishing || 0)),
     "✅ منتشرشده: " + (byStatus.published || 0), "⚠️ خطا: " + (byStatus.failed || 0), "🎧 ترک‌های کتابخانه: " + lib.length,
@@ -7241,7 +7379,8 @@ function showStatsPanel_(chatId, uid) {
 }
 function showMaintenancePanel_(chatId, uid) {
   if (!adminGate_(chatId, uid, "settings")) return;
-  const triggers = ScriptApp.getProjectTriggers().map(function(t) { return t.getHandlerFunction(); });
+  const rawTriggers = safeGetProjectTriggers_() || [];
+  const triggers = rawTriggers.map(function(t) { try { return t.getHandlerFunction(); } catch (e) { return ""; } }).filter(Boolean);
   const counts = {};
   triggers.forEach(function(x) { counts[x] = (counts[x] || 0) + 1; });
   const lines = ["🧹 نگهداری و بکاپ",
@@ -7284,8 +7423,8 @@ function showSettingsPanel_(chatId, uid, page, query) {
   sendMessage_(chatId, "⚙️ تنظیمات (" + all.length + ") — صفحهٔ " + (p + 1) + "/" + pages + (q ? " — جست‌وجو: " + q : ""), { inline_keyboard: rows });
 }
 function showSettingEditor_(chatId, uid, rowIndex) {
-  if (!adminGate_(chatId, uid, "settings")) return;
   const setting = getAllSettings_().find(function(s) { return s.row === Number(rowIndex); });
+  if (!adminGate_(chatId, uid, adminPermissionForSettingKey_(setting ? setting.key : ""))) return;
   if (!setting) { sendMessage_(chatId, "تنظیم پیدا نشد.", { inline_keyboard: [[{ text: "🔁 بازخوانی", callback_data: "a:settings" }]] }); return; }
   const meta = SETTINGS_CHOICE_OPTIONS_[setting.key];
   const rows = [];
@@ -7313,7 +7452,18 @@ function showChannelPanel_(chatId, uid) {
     [{ text: "🧪 تست کاور", callback_data: "a:covertest" }, { text: "🏠 منو", callback_data: "a:home" }]
   ] });
 }
-function rowOfSetting_(key) { const s = getAllSettings_().find(function(x) { return x.key === String(key); }); return s ? s.row : 0; }
+function rowOfSetting_(key) {
+  const k = String(key || "").trim();
+  if (!k) return 0;
+  let s = getAllSettings_().find(function(x) { return x.key === k; });
+  if (!s) {
+    try {
+      setSetting_(k, getSetting_(k));
+      s = getAllSettings_().find(function(x) { return x.key === k; });
+    } catch (e) {}
+  }
+  return s ? s.row : 0;
+}
 function showColorsPanel_(chatId, uid) {
   if (!adminGate_(chatId, uid, "settings")) return;
   const styles = ["default", "primary", "success", "danger"];
@@ -7380,7 +7530,8 @@ function handleAdminCallback_(cb) {
       const next = getSetting_("QUEUE_ENABLED") === "true" ? "false" : "true";
       setSetting_("QUEUE_ENABLED", next);
       answerCallbackQuery_(cb.id, next === "true" ? "صف روشن شد" : "صف خاموش شد");
-      if (next === "true") ensureWorkersReady_();
+      if (next === "true") ensureWorkersReady_(true);
+      else { try { CacheService.getScriptCache().remove("workers_ready_ok"); } catch (e) {} }
       showMaintenancePanel_(chatId, uid); return;
     }
     if (data === "a:covertest") {
@@ -7424,7 +7575,7 @@ function handleAdminCallback_(cb) {
       };
       if (simple[rest]) { simple[rest](); return; }
       if (rest.indexOf("settings") === 0) { answerCallbackQuery_(cb.id); showSettingsPanel_(chatId, uid, Number(parts[2]) || 0, ""); return; }
-      if (/^(sub|comingsoon|downloadtoggle)/.test(rest)) { handleSubmissionCallback_(cb, parts); return; }
+      if (/^(sub|comingsoon|freestyle|downloadtoggle|delapprove|delreject)/.test(rest)) { handleSubmissionCallback_(cb, parts); return; }
       if (/^(users|list|user|usersearch)/.test(rest)) { handleUsersCallback_(cb, parts); return; }
       if (/^(admins|adminadd|admindel|adminrole)/.test(rest)) { handleAdminsCallback_(cb, parts); return; }
       if (/^resets?/.test(rest)) { handleResetCallback_(cb, parts); return; }
@@ -8448,7 +8599,7 @@ function cleanupJob() {
     pruneTrigger_("broadcastQueueJob", 1);
     pruneTrigger_("cleanupJob", 1);
     pruneTrigger_("weeklyBackupJob", 1);
-    out.triggers = ScriptApp.getProjectTriggers().length;
+    out.triggers = (safeGetProjectTriggers_() || []).length;
     // ۴) ردیف‌های دانلود قدیمی (بیش از ۶۰ روز)
     const dsh = getSheet_(APP.SHEETS.MUSIC_DOWNLOADS);
     if (dsh.getLastRow() >= 2) {
