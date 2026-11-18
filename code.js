@@ -127,8 +127,13 @@ const DEFAULT_SETTINGS = {
   POST_FREESTYLE_TEXT: "FREESTYLE 🎤",
   POST_TELEGRAM_LINK: "", POST_DOWNLOAD_BUTTON_ON_COVER: "false",
   POST_DOWNLOAD_BUTTON_TEXT: "🎧 دریافت آهنگ کامل",
+  POST_ARTIST_CHANNEL_BUTTON_TEXT: "📢 کانال هنرمند",
+  POST_COVER_HEADER_SINGLE: "🎵 𝔑𝔢𝔴 𝔐𝔲𝔰𝔦𝔠 🔥",
+  POST_COVER_HEADER_ALBUM: "🎼 𝔑𝔢𝔴 𝔄𝔩𝔟𝔲𝔪 🔥",
+  POST_COVER_HEADER_COMING: "⏳ ℭ𝔬𝔪𝔦𝔫𝔤 𝔖𝔬𝔬𝔫 🔥",
+  POST_COVER_HEADER_FREESTYLE: "🎤 𝔉𝔯𝔢𝔢𝔰𝔱𝔶𝔩𝔢 🔥",
   POST_DEMO_HEADER: "🎙 𝔇𝔢𝔪𝔬 𝔐𝔲𝔰𝔦𝔠 📥",
-  POST_DEMO_REACTION_TEXT: "ری‌اکشن بزنید",
+  POST_DEMO_REACTION_TEXT: "🔥 ری‌اکشن بزنید ❤️‍🔥",
   // ── برش کانال: ۳۰ ثانیه از «اوج» آهنگ ──
   // peak = پرانرژی‌ترین بازهٔ ۳۰ ثانیه‌ای (از global_gain و اندازهٔ فریم‌های MP3) · start = ۳۰ ثانیهٔ نخست
   PREVIEW_PEAK_MODE: "peak",
@@ -920,8 +925,8 @@ const MSG = {
     DOWNLOAD_DISABLED: "این ترک فعلاً برای دانلود فعال نیست یا هنوز در کانال منتشر نشده است.",
     DOWNLOAD_BAD_LINK: "لینک دانلود معتبر نیست.",
     DOWNLOAD_SEND_FAIL: "ارسال فایل ممکن نشد؛ کمی بعد دوباره تلاش کن.",
-    DOWNLOAD_CAPTION: "🎧 {t}\n🎤 {a}\n\n{tg}",
-    DOWNLOAD_ALBUM_CAPTION: "💿 {t}\n🎤 {a}\n\n{tg}",
+    DOWNLOAD_CAPTION: "<b>🎧 𝔉𝔲𝔩𝔩 𝔐𝔲𝔰𝔦𝔠 📥</b>\n\n<blockquote>💿 <b>{t}</b>\n🎤 <b>{a}</b></blockquote>\n\n{tg}",
+    DOWNLOAD_ALBUM_CAPTION: "<b>🎼 𝔉𝔲𝔩𝔩 𝔄𝔩𝔟𝔲𝔪 📥</b>\n\n<blockquote>💿 <b>{t}</b>\n🎤 <b>{a}</b></blockquote>\n\n{tg}",
     PUBLISHED_NOTIFY: "✅ موزیک تو منتشر شد: «{t}»{links}",
     PUBLISH_ADMIN_NOTIFY: "✅ انتشار انجام شد\n🆔 {id}\n📀 {t}",
     PUBLISH_FAIL_ADMIN: "⚠️ خطا در انتشار\n🆔 {id}\n📀 {t}\n🧩 مرحله: {s}\n❗️ {e}",
@@ -1183,8 +1188,8 @@ const MSG = {
     DOWNLOAD_DISABLED: "This track is not downloadable yet or not published.",
     DOWNLOAD_BAD_LINK: "Invalid download link.",
     DOWNLOAD_SEND_FAIL: "Could not send the file; try again shortly.",
-    DOWNLOAD_CAPTION: "🎧 {t}\n🎤 {a}\n\n{tg}",
-    DOWNLOAD_ALBUM_CAPTION: "💿 {t}\n🎤 {a}\n\n{tg}",
+    DOWNLOAD_CAPTION: "<b>🎧 𝔉𝔲𝔩𝔩 𝔐𝔲𝔰𝔦𝔠 📥</b>\n\n<blockquote>💿 <b>{t}</b>\n🎤 <b>{a}</b></blockquote>\n\n{tg}",
+    DOWNLOAD_ALBUM_CAPTION: "<b>🎼 𝔉𝔲𝔩𝔩 𝔄𝔩𝔟𝔲𝔪 📥</b>\n\n<blockquote>💿 <b>{t}</b>\n🎤 <b>{a}</b></blockquote>\n\n{tg}",
     PUBLISHED_NOTIFY: "✅ Your track is published: «{t}»{links}",
     PUBLISH_ADMIN_NOTIFY: "✅ Published\n🆔 {id}\n📀 {t}",
     PUBLISH_FAIL_ADMIN: "⚠️ Publish failed\n🆔 {id}\n📀 {t}\n🧩 Stage: {s}\n❗️ {e}",
@@ -3166,18 +3171,83 @@ function ccGateRequired_(uid) {
 function showConnectedGate_(chatId, uid) {
   sendMessage_(chatId, t_(uid, "CC_GATE_TEXT"), { inline_keyboard: [[{ text: t_(uid, "CC_GATE_BTN"), callback_data: "myc:add" }]] });
 }
+function resolveArtistChannelTarget_(sub) {
+  if (!sub) return null;
+  const uid = String(sub.userId || "");
+  if (uid) {
+    const connected = getConnectedChannelsForUser_(uid);
+    for (let i = 0; i < connected.length; i++) {
+      const ch = connected[i];
+      const uname = String(ch.username || "").replace(/^@/, "").trim();
+      if (uname) {
+        return {
+          url: "https://t.me/" + uname,
+          handle: "@" + uname,
+          title: String(ch.title || "").trim()
+        };
+      }
+      if (ch.chatId) {
+        try {
+          const infoRes = telegramRequest_("getChat", { chat_id: ch.chatId });
+          if (infoRes && infoRes.ok && infoRes.result) {
+            const info = infoRes.result;
+            if (info.username) {
+              const liveUname = String(info.username).replace(/^@/, "").trim();
+              try { setConnectedChannelField_(ch.id, "username", liveUname); } catch (e) {}
+              return {
+                url: "https://t.me/" + liveUname,
+                handle: "@" + liveUname,
+                title: String(info.title || ch.title || "").trim()
+              };
+            }
+            if (info.invite_link) {
+              return {
+                url: String(info.invite_link),
+                handle: String(info.title || ch.title || "Channel").trim(),
+                title: String(info.title || ch.title || "").trim()
+              };
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  }
+  const visibleMap = sub.platformVisible || {};
+  const tgLink = (sub.links || []).find(function(l) {
+    if (!l || !l.url) return false;
+    const plat = String(l.platform || platformFor_(l.url) || "");
+    if (plat !== "telegram") return false;
+    return visibleMap[plat] !== false;
+  });
+  if (tgLink && tgLink.url) {
+    const m = String(tgLink.url).match(/^https?:\/\/(?:t\.me|telegram\.me)\/([A-Za-z0-9_]{4,32})\/?$/i);
+    const mainTarget = getChannelTelegramTarget_();
+    const mainUrl = mainTarget && mainTarget.url ? String(mainTarget.url).toLowerCase() : "";
+    if (!mainUrl || String(tgLink.url).toLowerCase() !== mainUrl) {
+      return {
+        url: String(tgLink.url),
+        handle: m ? ("@" + m[1]) : String(tgLink.url),
+        title: ""
+      };
+    }
+  }
+  return null;
+}
 function ownerAdvertiseLine_(sub) {
   if (!ccAdvertiseEnabled_() || !sub) return "";
-  const ch = getConnectedChannelsForUser_(sub.userId).find(function(c) { return c.username; });
-  if (!ch) return "";
-  return t_(sub.userId, "CC_ADVERTISE_LINE", { link: "@" + String(ch.username).replace(/^@/, "") });
+  const target = resolveArtistChannelTarget_(sub);
+  if (!target) return "";
+  const linkDisplay = /^@[A-Za-z0-9_]{4,32}$/.test(String(target.handle || ""))
+    ? target.handle
+    : linkHtml_(target.url, target.handle || target.title || "Channel");
+  return "📢 <b>کانال هنرمند :</b> " + linkDisplay;
 }
 function ownerChannelButtonRow_(sub) {
   if (!ccAdvertiseEnabled_() || !sub) return null;
-  const ch = getConnectedChannelsForUser_(sub.userId).find(function(c) { return c.username; });
-  const link = publicChannelLink_(ch);
-  if (!ch || !link) return null;
-  return [{ text: t_(sub.userId, "CC_ADVERTISE_BTN"), url: link }];
+  const target = resolveArtistChannelTarget_(sub);
+  if (!target || !target.url) return null;
+  const btnText = String(getSetting_("POST_ARTIST_CHANNEL_BUTTON_TEXT") || t_(sub.userId, "CC_ADVERTISE_BTN") || DEFAULT_SETTINGS.POST_ARTIST_CHANNEL_BUTTON_TEXT || "📢 کانال هنرمند").trim();
+  return [{ text: btnText, url: target.url }];
 }
 function markConnectedChannelKicked_(row, err) {
   setConnectedChannelField_(row.id, "status", "kicked");
@@ -5676,9 +5746,10 @@ function handleMusicDownloadDelivery_(chatId, uid, trackIdOrSubmissionId) {
   // عنوان/هنرمند کاربر باید escape شود، وگرنه یک «<» یا «&» کل ارسال را با خطای parse شکست می‌دهد.
   const safeTitle = htmlEscape_(title);
   const safeArtists = htmlEscape_(artists);
-  const tgTarget = getChannelTelegramTarget_() || { url: "https://t.me/RapEvils", label: "Telegram · @RapEvils" };
-  const tgLine = "🔵 " + linkHtml_(tgTarget.url, tgTarget.label);
+  const tgLine = "<blockquote>✈️ <b>T.me :</b> " + channelHandleOrLinkHtml_() + "</blockquote>";
   const caption = isAlbum ? t_(uid, "DOWNLOAD_ALBUM_CAPTION", { t: safeTitle, a: safeArtists, n: seconds, tg: tgLine }) : t_(uid, "DOWNLOAD_CAPTION", { t: safeTitle, a: safeArtists, n: seconds, tg: tgLine });
+  const ccRow = sub ? ownerChannelButtonRow_(sub) : null;
+  const dlMarkup = ccRow ? { inline_keyboard: [ccRow] } : undefined;
   const sentIds = [];
   if (isAlbum) {
     for (let i = 0; i < tracks.length; i += 10) {
@@ -5688,13 +5759,13 @@ function handleMusicDownloadDelivery_(chatId, uid, trackIdOrSubmissionId) {
       if (r && r.ok && Array.isArray(r.result)) r.result.forEach(function(m) { if (m && m.message_id) sentIds.push(Number(m.message_id)); });
       else {
         for (let j = 0; j < batch.length; j++) {
-          const single = telegramRequest_("sendAudio", { chat_id: String(chatId), audio: batch[j].fileId, caption: i === 0 && j === 0 ? caption : undefined, parse_mode: i === 0 && j === 0 ? "HTML" : undefined });
+          const single = telegramRequest_("sendAudio", { chat_id: String(chatId), audio: batch[j].fileId, caption: i === 0 && j === 0 ? caption : undefined, parse_mode: i === 0 && j === 0 ? "HTML" : undefined, reply_markup: (i === 0 && j === 0) ? dlMarkup : undefined });
           if (single && single.ok && single.result) sentIds.push(Number(single.result.message_id));
         }
       }
     }
   } else {
-    const r = telegramRequest_("sendAudio", { chat_id: String(chatId), audio: track.fileId, caption: caption, parse_mode: "HTML" });
+    const r = telegramRequest_("sendAudio", { chat_id: String(chatId), audio: track.fileId, caption: caption, parse_mode: "HTML", reply_markup: dlMarkup });
     if (r && r.ok && r.result) sentIds.push(Number(r.result.message_id));
     else { sendMessage_(chatId, t_(uid, "DOWNLOAD_SEND_FAIL")); return false; }
   }
@@ -5758,6 +5829,16 @@ function getChannelTelegramTarget_() {
   CHANNEL_LINK_MEMO_ = target;
   return target;
 }
+function creditRoleEmoji_(role) {
+  const r = String(role || "").trim();
+  if (/^(?:production|producer|prod|prd|تنظیم|پروداکشن|آهنگساز)/i.test(r)) return "🎹";
+  if (/^(?:mix|master|میکس|مستر)/i.test(r)) return "🎛";
+  if (/^(?:lyrics?|lyricist|ترانه|شاعر)/i.test(r)) return "✍️";
+  if (/^(?:arrangement|arranger)/i.test(r)) return "🎼";
+  if (/^(?:cover|artwork|کاور|طراح)/i.test(r)) return "🎨";
+  if (/^(?:label|ناشر|لیبل)/i.test(r)) return "🏷";
+  return "🔹";
+}
 function creditLinesFor_(submission) {
   const sub = submission || {};
   const credits = PREVIEW_CREDITS_MEMO_ || getSubmissionCredits_(sub.id);
@@ -5765,7 +5846,9 @@ function creditLinesFor_(submission) {
   credits.forEach(function(c) {
     const person = String(c.person || "").trim();
     if (!person) return;
-    lines.push(htmlEscape_(c.role || "Credit") + " : " + htmlEscape_(joinArtistsAmp_(person)));
+    const roleLabel = String(c.role || "Credit").trim();
+    const icon = creditRoleEmoji_(roleLabel);
+    lines.push(icon + " <b>" + htmlEscape_(roleLabel) + " :</b> " + htmlEscape_(joinArtistsAmp_(person)));
   });
   return lines;
 }
@@ -5778,8 +5861,27 @@ function trackLinesFor_(submission) {
     const label = String(x.title || "");
     const base = String(sub.title || "");
     const short = label.indexOf(base) === 0 ? label.slice(base.length).replace(/^[\s—–\-:]+/, "") : label;
-    return ("0" + (i + 1)).slice(-2) + ". " + htmlEscape_(truncate_(short || label, 48));
+    return "<code>" + ("0" + (i + 1)).slice(-2) + ".</code> " + htmlEscape_(truncate_(short || label, 48));
   });
+}
+function coverHeaderForMode_(mode) {
+  const m = String(mode || "simple");
+  if (m === "album") return String(getSetting_("POST_COVER_HEADER_ALBUM") || DEFAULT_SETTINGS.POST_COVER_HEADER_ALBUM || "🎼 𝔑𝔢𝔴 𝔄𝔩𝔟𝔲𝔪 🔥").trim();
+  if (m === "coming_soon") return String(getSetting_("POST_COVER_HEADER_COMING") || DEFAULT_SETTINGS.POST_COVER_HEADER_COMING || "⏳ ℭ𝔬𝔪𝔦𝔫𝔤 𝔖𝔬𝔬𝔫 🔥").trim();
+  if (m === "freestyle") return String(getSetting_("POST_COVER_HEADER_FREESTYLE") || DEFAULT_SETTINGS.POST_COVER_HEADER_FREESTYLE || "🎤 𝔉𝔯𝔢𝔢𝔰𝔱𝔶𝔩𝔢 🔥").trim();
+  return String(getSetting_("POST_COVER_HEADER_SINGLE") || DEFAULT_SETTINGS.POST_COVER_HEADER_SINGLE || "🎵 𝔑𝔢𝔴 𝔐𝔲𝔰𝔦𝔠 🔥").trim();
+}
+function channelHandleOrLinkHtml_() {
+  const telegram = getChannelTelegramTarget_();
+  if (telegram && telegram.url) {
+    const m = String(telegram.url).match(/^https?:\/\/t\.me\/([A-Za-z0-9_]{4,32})$/i);
+    if (m) return "@" + m[1];
+    return linkHtml_(telegram.url, telegram.label || "Telegram");
+  }
+  const ch = String(getSetting_("CHANNEL_ID") || "").trim();
+  if (/^@[A-Za-z0-9_]{4,32}$/.test(ch)) return ch;
+  const brand = cleanHashtag_(getSetting_("HASHTAG_BRAND") || "RapEvils") || "RapEvils";
+  return "@" + brand;
 }
 function buildPostCaption_(submission, options) {
   const opts = options || {};
@@ -5793,15 +5895,23 @@ function buildPostCaption_(submission, options) {
     : (getSetting_("POST_OUT_NOW_TEXT") || "OUT NOW 🕊"));
   const artists = joinArtistsAmp_(sub.artists);
   const featuring = String(sub.featuring || "").trim();
-  const artistLine = artists + (featuring ? " feat. " + joinArtistsAmp_(featuring) : "");
+  const formattedArtistHtml = htmlEscape_(artists) + (featuring ? " <i>(feat. <b>" + htmlEscape_(joinArtistsAmp_(featuring)) + "</b>)</i>" : "");
+  const titleText = opts.plainTitle ? String(sub.title || "") : String(sub.title || "").toUpperCase();
+  const statusIcon = mode === "coming_soon" ? "⏳" : (mode === "freestyle" ? "🎤" : "✨");
 
   const quoteLines = [];
-  quoteLines.push((opts.plainTitle ? String(sub.title || "") : String(sub.title || "").toUpperCase()) + " " + titleEmoji);
-  quoteLines.push(outNow);
+  quoteLines.push("💿 <b>" + htmlEscape_(titleText) + "</b>" + (titleEmoji ? " " + htmlEscape_(titleEmoji) : ""));
+  quoteLines.push(statusIcon + " <b>" + htmlEscape_(outNow) + "</b>");
   const scheduleText = String((sub.request && sub.request.scheduleText) || "").trim();
-  if (mode === "coming_soon" && scheduleText) quoteLines.push(htmlEscape_(scheduleText));
-  if (!opts.compact) trackLinesFor_(sub).forEach(function(l) { quoteLines.push(l); });
-  if (!opts.compact) creditLinesFor_(sub).forEach(function(l) { quoteLines.push(l); });
+  if (mode === "coming_soon" && scheduleText) quoteLines.push("🗓 <b>Release :</b> <i>" + htmlEscape_(scheduleText) + "</i>");
+  if (!opts.compact) {
+    const tLines = trackLinesFor_(sub);
+    if (tLines.length) {
+      quoteLines.push("🎼 <b>Tracklist :</b>");
+      tLines.forEach(function(l) { quoteLines.push(l); });
+    }
+    creditLinesFor_(sub).forEach(function(l) { quoteLines.push(l); });
+  }
 
   const blocks = [];
   // کپشن دستی (ستون caption — ویرایش هنرمند یا مدیر) جای قالب خودکار می‌نشیند؛
@@ -5810,17 +5920,28 @@ function buildPostCaption_(submission, options) {
   if (custom) {
     blocks.push(htmlEscape_(custom).replace(/\r\n/g, "\n"));
   } else {
-    if (artistLine) blocks.push(htmlEscape_(artistLabel) + ": " + htmlEscape_(artistLine) + (artistEmoji ? " " + artistEmoji : ""));
+    const headerLines = [];
+    const coverHdr = coverHeaderForMode_(mode);
+    if (coverHdr) headerLines.push("<b>" + htmlEscape_(coverHdr) + "</b>");
+    if (artists) {
+      headerLines.push("🎤 <b>" + htmlEscape_(artistLabel) + " :</b> <b>" + formattedArtistHtml + "</b>" + (artistEmoji ? " " + htmlEscape_(artistEmoji) : ""));
+    }
+    if (headerLines.length) blocks.push(headerLines.join("\n"));
     blocks.push("<blockquote>" + quoteLines.join("\n") + "</blockquote>");
   }
 
   const visibleMap = sub.platformVisible || {};
   const links = (sub.links || []).filter(function(l) { return l && l.url && visibleMap[l.platform] !== false; });
   if (links.length && !custom) {
-    blocks.push(links.slice(0, 8).map(function(l) {
+    const linkItems = links.slice(0, 8).map(function(l) {
       const meta = platformMeta_(l.platform || platformFor_(l.url));
-      return meta.emoji + " " + linkHtml_(l.url, meta.label);
-    }).join("\n"));
+      return meta.emoji + " <b>" + linkHtml_(l.url, meta.label) + "</b>";
+    });
+    const linkRows = [];
+    for (let i = 0; i < linkItems.length; i += 2) {
+      linkRows.push(linkItems.slice(i, i + 2).join("  ·  "));
+    }
+    blocks.push(linkRows.join("\n"));
   }
 
   // تبلیغ کانال وصل‌شدهٔ هنرمند (اختیاری/اجباری از تنظیمات CC_ADVERTISE)
@@ -5838,8 +5959,8 @@ function buildPostCaption_(submission, options) {
     // اگر فوتر خودش دقیقاً همان لینک تلگرام با ایموجی است، تکراری محسوب می‌شود و فقط نسخه خودکار (لینک‌دار) می‌ماند
     const footerHasFullTelegram = /Telegram\s*·\s*@/i.test(footer) && /t\.me/i.test(footer);
     if (footerHasFullTelegram) footer = "";
-    const telegram = getChannelTelegramTarget_();
-    if (telegram) blocks.push("🔵 " + linkHtml_(telegram.url, telegram.label));
+    const chHandle = channelHandleOrLinkHtml_();
+    if (chHandle) blocks.push("<blockquote>✈️ <b>T.me :</b> " + chHandle + "</blockquote>");
     if (footer) blocks.push(opts.plainFooter ? footer : htmlEscape_(footer));
   }
 
@@ -5946,24 +6067,11 @@ function genresForSubmission_(submission) {
 // کپشن پست صوتی (دمو ۳۰ ثانیه‌ای): هدر 🎙 𝔇𝔢𝔪𝔬 𝔐𝔲𝔰𝔦𝔠 📥 + باکس نقل‌قول آیدی کانال + ری‌اکشن بزنید
 function buildAudioCaption_(submission, trackTitle) {
   const headerRaw = String(getSetting_("POST_DEMO_HEADER") || DEFAULT_SETTINGS.POST_DEMO_HEADER || "🎙 𝔇𝔢𝔪𝔬 𝔐𝔲𝔰𝔦𝔠 📥").trim();
-  const reactionRaw = String(getSetting_("POST_DEMO_REACTION_TEXT") || DEFAULT_SETTINGS.POST_DEMO_REACTION_TEXT || "ری‌اکشن بزنید").trim();
-  const telegram = getChannelTelegramTarget_();
-  let handleHtml = "@RapEvils";
-  if (telegram && telegram.url) {
-    const m = String(telegram.url).match(/^https?:\/\/t\.me\/([A-Za-z0-9_]{4,32})$/i);
-    if (m) handleHtml = "@" + m[1];
-    else handleHtml = linkHtml_(telegram.url, telegram.label || "Telegram");
-  } else {
-    const ch = String(getSetting_("CHANNEL_ID") || "").trim();
-    if (/^@[A-Za-z0-9_]{4,32}$/.test(ch)) handleHtml = ch;
-    else {
-      const brand = cleanHashtag_(getSetting_("HASHTAG_BRAND") || "RapEvils") || "RapEvils";
-      handleHtml = "@" + brand;
-    }
-  }
+  const reactionRaw = String(getSetting_("POST_DEMO_REACTION_TEXT") || DEFAULT_SETTINGS.POST_DEMO_REACTION_TEXT || "🔥 ری‌اکشن بزنید ❤️‍🔥").trim();
+  const handleHtml = channelHandleOrLinkHtml_();
   const parts = [
     "<b>" + htmlEscape_(headerRaw) + "</b>",
-    "<blockquote>✈️ T.me : " + handleHtml + "</blockquote>"
+    "<blockquote>✈️ <b>T.me :</b> " + handleHtml + "</blockquote>"
   ];
   if (reactionRaw) parts.push("<b>" + htmlEscape_(reactionRaw) + "</b>");
   return parts.join("\n\n");
@@ -6036,7 +6144,7 @@ function draftPreviewSubmission_(draft) {
     return { seq: i + 1, title: t };
   });
   return {
-    id: "PREVIEW", mode: draft.mode, title: d.title || "—", artists: d.artists || "—", featuring: d.featuring || "",
+    id: "PREVIEW", userId: String(draft.userId || ""), mode: draft.mode, title: d.title || "—", artists: d.artists || "—", featuring: d.featuring || "",
     caption: "", links: (d.links || []), platformVisible: d.platformVisible || {},
     request: { scheduleText: d.scheduleText || "", details: { genres: Array.isArray(d.genres) ? d.genres : [] } },
     _previewCredits: credits, _previewTracks: tracks
@@ -6634,12 +6742,12 @@ function publishAudioStage_(sub, stage, channel) {
     if (libTrack) stage[key + "_track"] = trackId;
   });
   stage.audioMessageIds = sentIds.slice();
-  // اگر هیچ پست صوتی‌ای در کانال ساخته نشد (برش ۳۰ ثانیه‌ای ممکن نبود)، دکمهٔ دریافت فایل کامل
-  // روی همان پست کاور می‌نشیند تا راه رسیدن به آهنگ کامل بسته نماند.
+  // اگر هیچ پست صوتی‌ای در کانال ساخته نشد (برش ۳۰ ثانیه‌ای ممکن نبود)، دکمهٔ دریافت فایل کامل و کانال هنرمند
+  // روی همان پست کاور می‌نشینند تا راه رسیدن به آهنگ کامل و کانال هنرمند بسته نماند.
   if (!sentIds.length) {
     const coverIds = stage.visualMessageIds || [];
     const coverId = Number(stage.captionMessageId || coverIds[0] || 0);
-    const fallbackMarkup = downloadButtonMarkup_(sub, "");
+    const fallbackMarkup = audioPostMarkup_(sub, "");
     if (coverId && fallbackMarkup) {
       try { telegramRequest_("editMessageReplyMarkup", { chat_id: channel, message_id: coverId, reply_markup: fallbackMarkup }); } catch (e) {}
       stage.downloadButtonOnCover = true;
@@ -6661,7 +6769,7 @@ function sendChannelAudio_(payload) {
 }
 // ───────── تازه‌سازی دکمهٔ دانلود پست‌های قدیمی ─────────
 // لینک دیپ‌لینک امضاشده و تاریخ‌دار است؛ اگر دکمه تا ابد بماند پس از انقضا می‌میرد.
-// این کار روزانه دکمهٔ پست‌های منتشرشده را با توکن تازه بازنویسی می‌کند.
+// این کار روزانه دکمهٔ پست‌های منتشرشده را با توکن تازه بازنویسی می‌کند (با حفظ دکمهٔ کانال هنرمند زیر پست دمو).
 function refreshDownloadButtonsJob() {
   resetRuntimeCaches_();
   const channel = normalizeChannelId_(getSetting_("CHANNEL_ID"));
@@ -6674,18 +6782,30 @@ function refreshDownloadButtonsJob() {
   for (let i = 0; i < subs.length; i++) {
     const sub = subs[i];
     const stage = parsePublishStage_(sub);
-    const ids = (stage.audioMessageIds || []).concat(includeCover ? (stage.visualMessageIds || []) : []);
-    if (!ids.length) continue;
+    const audioIds = stage.audioMessageIds || [];
+    const coverIds = includeCover ? (stage.visualMessageIds || []) : [];
+    if (!audioIds.length && !coverIds.length) continue;
     // اگر آخرین تازه‌سازی نزدیک است، رد شو
     const last = dateMillis_(stage.downloadRefreshedAt) || dateMillis_(sub.publishedAt);
     if (last && (nowMs_() - last) < refreshDays * 86400000) continue;
-    const markup = downloadButtonMarkup_(sub, "");
-    if (!markup) continue;
+    const tracks = getMusicLibrary_().filter(function(x) { return x.submissionId === sub.id; }).sort(function(a, b) { return a.seq - b.seq; });
     let ok = false;
-    ids.forEach(function(mid) {
+    audioIds.forEach(function(mid, idx) {
+      const trk = tracks[idx];
+      const markup = audioPostMarkup_(sub, trk ? trk.trackId : "");
+      if (!markup) return;
       const r = telegramRequest_("editMessageReplyMarkup", { chat_id: channel, message_id: Number(mid), reply_markup: markup });
       if (r && r.ok) ok = true;
     });
+    if (coverIds.length) {
+      const coverMarkup = postActionsMarkup_(sub);
+      if (coverMarkup) {
+        coverIds.forEach(function(mid) {
+          const r = telegramRequest_("editMessageReplyMarkup", { chat_id: channel, message_id: Number(mid), reply_markup: coverMarkup });
+          if (r && r.ok) ok = true;
+        });
+      }
+    }
     if (ok) { stage.downloadRefreshedAt = nowMs_(); savePublishStage_(sub, stage); updated++; }
   }
   if (updated) console.log("refreshDownloadButtonsJob: " + updated + " پست تازه شد.");
@@ -6702,14 +6822,24 @@ function refreshPublishedPrimaryDownloadButton_(submission, trackId) {
   const channel = normalizeChannelId_(getSetting_("CHANNEL_ID"));
   if (!channel) return false;
   if (trackId && getMusicLibraryTrack_(trackId) && String(getMusicLibraryTrack_(trackId).submissionId) !== String(sub.id)) return false;
-  // دکمه‌های دانلود روی پیام‌های صوتی هستند؛ اگر نبودند، کاور.
-  const ids = (stage.audioMessageIds || []).length ? stage.audioMessageIds : (stage.visualMessageIds || []);
-  const markup = postActionsMarkup_(sub);
+  // دکمه‌های دانلود و کانال هنرمند روی پیام‌های صوتی هستند؛ اگر نبودند، کاور.
+  const audioIds = stage.audioMessageIds || [];
+  const tracks = getMusicLibrary_().filter(function(x) { return x.submissionId === sub.id; }).sort(function(a, b) { return a.seq - b.seq; });
   let ok = false;
-  const targetTrack = trackId || ((getMusicLibrary_().filter(function(x) { return x.submissionId === sub.id && x.downloadAllowed && x.fileId; })[0] || {}).trackId || "");
-  ids.forEach(function(mid) {
-    const m = trackId && ids.length > 1 ? downloadButtonMarkup_(sub, targetTrack) : markup;
-    const r = telegramRequest_("editMessageReplyMarkup", { chat_id: channel, message_id: mid, reply_markup: m || { inline_keyboard: [] } });
+  if (audioIds.length) {
+    audioIds.forEach(function(mid, idx) {
+      const trk = tracks[idx];
+      const tId = (trk && trk.trackId) || trackId || "";
+      const m = audioPostMarkup_(sub, tId);
+      const r = telegramRequest_("editMessageReplyMarkup", { chat_id: channel, message_id: mid, reply_markup: m || { inline_keyboard: [] } });
+      if (r && r.ok) ok = true;
+    });
+    return ok;
+  }
+  const coverIds = stage.visualMessageIds || [];
+  const coverMarkup = postActionsMarkup_(sub);
+  coverIds.forEach(function(mid) {
+    const r = telegramRequest_("editMessageReplyMarkup", { chat_id: channel, message_id: mid, reply_markup: coverMarkup || { inline_keyboard: [] } });
     if (r && r.ok) ok = true;
   });
   return ok;
@@ -9189,9 +9319,21 @@ function sendTrackCutToAdmin_(chatId, uid, submissionId, seq) {
     sendMessage_(chatId, "⚠️ برش ساخته نشد (فرمت ناشناخته، فایل خراب، یا بزرگ‌تر از سقف getFile تلگرام).\nدر کانال هم پست صوتی نمی‌رود و دکمهٔ دریافت روی پست کاور می‌نشیند.");
     return;
   }
-  const cap = "🎧 برش کانال: " + info.seconds + "s از " + adminCutSecondLabel_(info.startSecond) + " (" + adminCutModeLabel_(info.mode) + ")" +
+  const infoLine = "🎧 برش کانال: " + info.seconds + "s از " + adminCutSecondLabel_(info.startSecond) + " (" + adminCutModeLabel_(info.mode) + ")" +
     (info.totalSeconds ? " · اثر ≈ " + adminCutSecondLabel_(info.totalSeconds) : "") + "\n📀 «" + trackTitle + "»";
-  const r = sendChannelAudio_({ chat_id: String(chatId), audio: blob, title: truncate_(trackTitle, 60), performer: truncate_(adminPerformerFor_(sub), 60), caption: cap });
+  sendMessage_(chatId, infoLine);
+  const trackId = musicTrackIdFromMedia_(sub.id, item, index);
+  const payload = {
+    chat_id: String(chatId),
+    audio: blob,
+    title: truncate_(trackTitle, 60),
+    performer: truncate_(adminPerformerFor_(sub), 60),
+    caption: buildAudioCaption_(sub, trackTitle),
+    parse_mode: "HTML"
+  };
+  const markup = audioPostMarkup_(sub, trackId);
+  if (markup) payload.reply_markup = markup;
+  const r = sendChannelAudio_(payload);
   if (!r || !r.ok) sendMessage_(chatId, "⚠️ ارسال برش ناموفق بود: " + String((r && r.description) || ""));
 }
 
