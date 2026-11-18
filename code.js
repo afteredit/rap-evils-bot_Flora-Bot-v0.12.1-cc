@@ -127,6 +127,8 @@ const DEFAULT_SETTINGS = {
   POST_FREESTYLE_TEXT: "FREESTYLE 🎤",
   POST_TELEGRAM_LINK: "", POST_DOWNLOAD_BUTTON_ON_COVER: "false",
   POST_DOWNLOAD_BUTTON_TEXT: "🎧 دریافت آهنگ کامل",
+  POST_DEMO_HEADER: "🎙 𝔇𝔢𝔪𝔬 𝔐𝔲𝔰𝔦𝔠 📥",
+  POST_DEMO_REACTION_TEXT: "ری‌اکشن بزنید",
   // ── برش کانال: ۳۰ ثانیه از «اوج» آهنگ ──
   // peak = پرانرژی‌ترین بازهٔ ۳۰ ثانیه‌ای (از global_gain و اندازهٔ فریم‌های MP3) · start = ۳۰ ثانیهٔ نخست
   PREVIEW_PEAK_MODE: "peak",
@@ -5941,14 +5943,30 @@ function genresForSubmission_(submission) {
   });
   return out.slice(0, maxGenreTags_());
 }
-// کپشن پست صوتی: فقط نام ترک + خط تلگرام
+// کپشن پست صوتی (دمو ۳۰ ثانیه‌ای): هدر 🎙 𝔇𝔢𝔪𝔬 𝔐𝔲𝔰𝔦𝔠 📥 + باکس نقل‌قول آیدی کانال + ری‌اکشن بزنید
 function buildAudioCaption_(submission, trackTitle) {
-  const sub = submission || {};
-  const title = String(trackTitle || sub.title || "").trim();
-  const lines = [htmlEscape_(title)];
+  const headerRaw = String(getSetting_("POST_DEMO_HEADER") || DEFAULT_SETTINGS.POST_DEMO_HEADER || "🎙 𝔇𝔢𝔪𝔬 𝔐𝔲𝔰𝔦𝔠 📥").trim();
+  const reactionRaw = String(getSetting_("POST_DEMO_REACTION_TEXT") || DEFAULT_SETTINGS.POST_DEMO_REACTION_TEXT || "ری‌اکشن بزنید").trim();
   const telegram = getChannelTelegramTarget_();
-  if (telegram) lines.push("🔵 " + linkHtml_(telegram.url, telegram.label));
-  return lines.join("\n");
+  let handleHtml = "@RapEvils";
+  if (telegram && telegram.url) {
+    const m = String(telegram.url).match(/^https?:\/\/t\.me\/([A-Za-z0-9_]{4,32})$/i);
+    if (m) handleHtml = "@" + m[1];
+    else handleHtml = linkHtml_(telegram.url, telegram.label || "Telegram");
+  } else {
+    const ch = String(getSetting_("CHANNEL_ID") || "").trim();
+    if (/^@[A-Za-z0-9_]{4,32}$/.test(ch)) handleHtml = ch;
+    else {
+      const brand = cleanHashtag_(getSetting_("HASHTAG_BRAND") || "RapEvils") || "RapEvils";
+      handleHtml = "@" + brand;
+    }
+  }
+  const parts = [
+    "<b>" + htmlEscape_(headerRaw) + "</b>",
+    "<blockquote>✈️ T.me : " + handleHtml + "</blockquote>"
+  ];
+  if (reactionRaw) parts.push("<b>" + htmlEscape_(reactionRaw) + "</b>");
+  return parts.join("\n\n");
 }
 // ترک بدون فایل منتشرشده نباید دکمه/لینک دانلود داشته باشد.
 function markFloorTrack_(trackId, enable) {
@@ -9137,7 +9155,7 @@ function previewSubmissionPost_(chatId, uid, submissionId) {
         { inline_keyboard: [[{ text: "🎧 برش کانال را بشنو", callback_data: "a:subcut:" + sub.id + ":" + (item.seq || index + 1) }]] });
       // دقیقاً همان payload انتشار، فقط به‌جای Blobِ برش، file_id اصلیِ کاربر
       const base = { chat_id: String(chatId), title: truncate_(trackTitle, 60), performer: truncate_(adminPerformerFor_(sub), 60), caption: buildAudioCaption_(sub, trackTitle), parse_mode: "HTML" };
-      const markup = downloadButtonMarkup_(sub, trackId);
+      const markup = audioPostMarkup_(sub, trackId);
       if (markup) base.reply_markup = markup;
       const coverMessageId = Number(visualIds[0] || 0);
       if (coverMessageId && String(getSetting_("POST_AUDIO_REPLY_TO_COVER") || "true") !== "false") base.reply_to_message_id = coverMessageId;
