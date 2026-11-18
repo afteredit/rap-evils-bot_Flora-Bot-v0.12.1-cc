@@ -34,6 +34,7 @@ const APP = {
     SUPPORT: "SupportMessages", BROADCASTS: "Broadcasts", BROADCAST_MEDIA: "BroadcastMedia",
     CONNECTED_CHANNELS: "ConnectedChannels",
     CC_BANNER: "CcBanner",
+    CC_POSTS: "CcPosts",
     DELIVERY_LOG: "DeliveryLog", ADMIN_LOG: "AdminLog", ERROR_LOG: "ErrorLog"
   }
 };
@@ -50,6 +51,7 @@ let IDENTITY_BY_ID_MEMO_ = null;
 let MUSIC_DRAFT_BY_ID_MEMO_ = null;
 let CONNECTED_CHANNELS_MEMO_ = null;
 let CC_BANNER_MEMO_ = null;
+let CC_POSTS_MEMO_ = null;
 let BOT_USER_ID_MEMO_ = null;
 let DRAFT_MEDIA_MEMO_ = null;
 let PREVIEW_CREDITS_MEMO_ = null;
@@ -78,7 +80,7 @@ function resetRuntimeCaches_() {
   SUBMISSION_MEDIA_MEMO_ = null; SUBMISSION_CREDITS_MEMO_ = null;
   MUSIC_LIBRARY_MEMO_ = null; MUSIC_DOWNLOADS_MEMO_ = null; ADMIN_ACCESS_MEMO_ = null;
   SUPPORT_MESSAGES_MEMO_ = null; BOT_USERNAME_MEMO_ = null; CHANNEL_LINK_MEMO_ = null;
-  CONNECTED_CHANNELS_MEMO_ = null; CC_BANNER_MEMO_ = null; BOT_USER_ID_MEMO_ = null;
+  CONNECTED_CHANNELS_MEMO_ = null; CC_BANNER_MEMO_ = null; CC_POSTS_MEMO_ = null; BOT_USER_ID_MEMO_ = null;
 }
 
 const HEADERS = {
@@ -103,6 +105,7 @@ const HEADERS = {
   AdminLog: ["log_id", "admin_id", "action", "target", "details", "created_at"],
   ConnectedChannels: ["id", "user_id", "chat_id", "username", "title", "members", "status", "connected_at", "last_ok_at", "last_error"],
   CcBanner: ["id", "seq", "source_chat_id", "source_message_id", "kind", "caption", "created_by", "created_at", "active"],
+  CcPosts: ["post_id", "batch_id", "source_type", "channel_id", "chat_id", "message_id", "kind", "caption", "file_id", "status", "created_by", "created_at", "updated_at"],
   ErrorLog: ["log_id", "where", "message", "extra", "user_id", "created_at"]
 };
 
@@ -706,7 +709,11 @@ const MSG = {
     CC_ADD_NOT_ADMIN: "❌ بات در این کانال ادمین نیست (یا دسترسی ارسال ندارد). اول بات را ادمین کن و دوباره امتحان کن.",
     CC_ADD_TAKEN: "❌ این کانال قبلاً توسط کاربر دیگری وصل شده است.",
     CC_ADD_LIMIT: "❌ سقف کانال‌های وصل‌شدهٔ تو {n} است؛ اول یکی را جدا کن.",
-    CC_RM_OK: "🗑 کانال «{t}» جدا شد.",
+    CC_RM_OK: "🗑 کانال «{t}» حذف شد.",
+    CC_EDIT_ASK: "✏️ آیدی یا یوزرنیم کانال جدید را بفرست تا جایگزین کانال «{t}» شود (یا اگر فقط نام/یوزرنیم همین کانال را در تلگرام عوض کرده‌ای، دکمهٔ «🔄 همگام‌سازی» را بزن):",
+    CC_EDIT_OK: "✅ کانال «{old}» با کانال «{t}» جایگزین شد.",
+    CC_SYNC_OK: "🔄 مشخصات کانال «{t}» از تلگرام به‌روزرسانی شد.",
+    CC_BANNER_DELETED_WARN: "⚠️ بنر تبلیغاتی ما را از کانال «{t}» پاک کرده بودی!\n❌ پیام «پوشش داده شد» از کانال اصلی حذف شد و بنر جدید دوباره در کانالت ارسال گردید. لطفاً بنر را از کانالت پاک نکن.",
     CC_GATE_TEXT: "📢 برای ارسال اثر و دیدن آثار، اول باید بات را در کانال تلگرامت ادمین کنی (دسترسی کامل).\nاز این به بعد ما کارهایت را پوشش می‌دهیم و کانالت هم تبلیغ می‌شود.",
     CC_GATE_BTN: "📢 اتصال کانال",
     CC_PROMO_TEXT: "🎬 اثر تازهٔ «{t}» در کانال اصلی منتشر شد.",
@@ -935,8 +942,8 @@ const MSG = {
     DOWNLOAD_DISABLED: "این ترک فعلاً برای دانلود فعال نیست یا هنوز در کانال منتشر نشده است.",
     DOWNLOAD_BAD_LINK: "لینک دانلود معتبر نیست.",
     DOWNLOAD_SEND_FAIL: "ارسال فایل ممکن نشد؛ کمی بعد دوباره تلاش کن.",
-    DOWNLOAD_CAPTION: "🎧 {t}\n🎤 {a}\n\n⏳ این فایل تا {n} ثانیهٔ دیگر از گفت‌وگو حذف می‌شود.",
-    DOWNLOAD_ALBUM_CAPTION: "💿 {t}\n🎤 {a}\n\n⏳ این فایل‌ها تا {n} ثانیهٔ دیگر از گفت‌وگو حذف می‌شوند.",
+    DOWNLOAD_CAPTION: "🎧 {t}\n🎤 {a}\n\n{tg}",
+    DOWNLOAD_ALBUM_CAPTION: "💿 {t}\n🎤 {a}\n\n{tg}",
     PUBLISHED_NOTIFY: "✅ موزیک تو منتشر شد: «{t}»{links}",
     PUBLISH_ADMIN_NOTIFY: "✅ انتشار انجام شد\n🆔 {id}\n📀 {t}",
     PUBLISH_FAIL_ADMIN: "⚠️ خطا در انتشار\n🆔 {id}\n📀 {t}\n🧩 مرحله: {s}\n❗️ {e}",
@@ -980,7 +987,11 @@ const MSG = {
     CC_ADD_NOT_ADMIN: "❌ The bot is not an admin there (or cannot post). Make it admin first, then retry.",
     CC_ADD_TAKEN: "❌ This channel is already connected by another user.",
     CC_ADD_LIMIT: "❌ Your connected-channel limit is {n}; disconnect one first.",
-    CC_RM_OK: "🗑 Channel «{t}» disconnected.",
+    CC_RM_OK: "🗑 Channel «{t}» removed.",
+    CC_EDIT_ASK: "✏️ Send the new channel username or id to replace «{t}» (or tap «🔄 Sync info» if you only renamed it):",
+    CC_EDIT_OK: "✅ Channel «{old}» was replaced with «{t}».",
+    CC_SYNC_OK: "🔄 Channel «{t}» info updated from Telegram.",
+    CC_BANNER_DELETED_WARN: "⚠️ You deleted our promotional banner from channel «{t}»!\n❌ Your coverage notice was removed from the main channel and a new banner has been re-posted to your channel. Please do not delete the banner.",
     CC_GATE_TEXT: "📢 To submit works and view them, first make the bot an admin in your Telegram channel (full access).\nFrom then on we cover your work and advertise your channel.",
     CC_GATE_BTN: "📢 Connect channel",
     CC_PROMO_TEXT: "🎬 New work «{t}» was published on the main channel.",
@@ -1204,8 +1215,8 @@ const MSG = {
     DOWNLOAD_DISABLED: "This track is not downloadable yet or not published.",
     DOWNLOAD_BAD_LINK: "Invalid download link.",
     DOWNLOAD_SEND_FAIL: "Could not send the file; try again shortly.",
-    DOWNLOAD_CAPTION: "🎧 {t}\n🎤 {a}\n\n⏳ This file is removed from the chat in {n} seconds.",
-    DOWNLOAD_ALBUM_CAPTION: "💿 {t}\n🎤 {a}\n\n⏳ These files are removed from the chat in {n} seconds.",
+    DOWNLOAD_CAPTION: "🎧 {t}\n🎤 {a}\n\n{tg}",
+    DOWNLOAD_ALBUM_CAPTION: "💿 {t}\n🎤 {a}\n\n{tg}",
     PUBLISHED_NOTIFY: "✅ Your track is published: «{t}»{links}",
     PUBLISH_ADMIN_NOTIFY: "✅ Published\n🆔 {id}\n📀 {t}",
     PUBLISH_FAIL_ADMIN: "⚠️ Publish failed\n🆔 {id}\n📀 {t}\n🧩 Stage: {s}\n❗️ {e}",
@@ -1335,6 +1346,7 @@ function migrateSheetColumns_() {
   try { ensureSheet_(APP.SHEETS.SESSIONS, HEADERS.Sessions); } catch (e) {}
   try { ensureSheet_(APP.SHEETS.CONNECTED_CHANNELS, HEADERS.ConnectedChannels); } catch (e) {}
   try { ensureSheet_(APP.SHEETS.CC_BANNER, HEADERS.CcBanner); } catch (e) {}
+  try { ensureSheet_(APP.SHEETS.CC_POSTS, HEADERS.CcPosts); } catch (e) {}
 }
 
 function styleSheets_() {
@@ -1405,6 +1417,10 @@ function enableWorkers() {
 }
 function disableWorkers() { disableWorkerTriggers_(); SpreadsheetApp.getActive().toast("پردازش صف‌ها متوقف شد.", "Flora Bot", 5); }
 // نصب/بازسازی همهٔ تریگرهای لازم (از منوی مدیر و اسکریپت‌ادیتور قابل اجراست)
+function safeGetProjectTriggers_() {
+  try { return ScriptApp.getProjectTriggers() || []; }
+  catch (e) { console.warn("[FloraBot] safeGetProjectTriggers_: " + (e && e.message || e)); return null; }
+}
 function installTriggers_() {
   const wanted = {
     publishQueueJob: String(getSetting_("QUEUE_ENABLED") || "true") === "true",
@@ -1428,11 +1444,15 @@ function installTriggers_() {
   });
   if (String(getSetting_("BACKUP_ENABLED") || "false") === "true") ensureWeeklyBackupTrigger_();
   else removeTrigger_("weeklyBackupJob");
-  return ScriptApp.getProjectTriggers().map(function(t) { return t.getHandlerFunction(); });
+  try { CacheService.getScriptCache().put("workers_ready_ok", "1", 21600); } catch (e) {}
+  return (safeGetProjectTriggers_() || []).map(function(t) { return t.getHandlerFunction(); });
 }
 function disableWorkerTriggers_() {
-  ScriptApp.getProjectTriggers().forEach(function(t) {
-    if (["publishQueueJob", "broadcastQueueJob"].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
+  try { CacheService.getScriptCache().remove("workers_ready_ok"); } catch (e) {}
+  (safeGetProjectTriggers_() || []).forEach(function(t) {
+    if (["publishQueueJob", "broadcastQueueJob"].indexOf(t.getHandlerFunction()) >= 0) {
+      try { ScriptApp.deleteTrigger(t); } catch (e) {}
+    }
   });
 }
 function runWorkersNow() { publishQueueJob(); broadcastQueueJob(); SpreadsheetApp.getActive().toast("صف‌ها بررسی شدند.", "Flora Bot", 5); }
@@ -1524,10 +1544,17 @@ function logError_(where, err, extra) {
 function notifyAdminError_(where, err) {
   try {
     if (String(getSetting_("ADMIN_ERROR_NOTIFY") || "true") !== "true") return;
-    // ضد سیل: حداکثر هر ۵ دقیقه یک پیام خطا برای مدیر
+    const rawMsg = String(err && err.message || err || "");
+    if (/Unable to talk to trigger service/i.test(rawMsg)) return;
+    // ضد سیل: حداکثر هر ۵ دقیقه یک پیام خطا برای مدیر (در حافظه و CacheService بین اجراها)
     if (nowMs_() - LAST_ERROR_NOTIFY_MEMO_ < 5 * 60000) return;
+    try {
+      const cache = CacheService.getScriptCache();
+      if (cache.get("err_notify_lock")) return;
+      cache.put("err_notify_lock", "1", 300);
+    } catch (ce) {}
     LAST_ERROR_NOTIFY_MEMO_ = nowMs_();
-    const text = "⚠️ خطای اجرایی\n📍 " + truncate_(where || "?", 90) + "\n🕐 " + formatDate_(new Date()) + "\n💬 " + truncate_(String(err && err.message || err || ""), 350);
+    const text = "⚠️ خطای اجرایی\n📍 " + truncate_(where || "?", 90) + "\n🕐 " + formatDate_(new Date()) + "\n💬 " + truncate_(rawMsg, 350);
     getAdmins_().forEach(function(a) { try { sendMessage_(a, text); } catch (e) {} });
   } catch (e) { console.error("notifyAdminError_: " + e); }
 }
@@ -1637,11 +1664,25 @@ function withDocLock_(fn) {
 }
 
 // ───────────────────────── کاربران / رمز / شناسایی ─────────────────────────
+function isArtistButtonPlaceholder_(value) {
+  const s = String(value || "").replace(/^[\s👤✍️🎤•\-:：()«»"']+|[\s👤✍️🎤•\-:：()«»"']+$/g, "").trim();
+  if (!s) return false;
+  return /^(?:دریافت(?:\s*شده)?\s*از\s*پروفایل|وارد\s*کردن\s*دستی|from\s*profile|taken\s*from\s*profile|enter\s*manually)$/i.test(s);
+}
+function sanitizeArtistName_(value) {
+  let s = String(value || "").trim();
+  if (!s) return "";
+  s = s.replace(/\s*\(\s*(?:دریافت(?:\s*شده)?\s*از\s*پروفایل|from\s*profile|taken\s*from\s*profile)\s*\)\s*/gi, " ").trim();
+  s = s.replace(/^(?:👤\s*)?(?:دریافت(?:\s*شده)?\s*از\s*پروفایل|from\s*profile|taken\s*from\s*profile)$/i, "").trim();
+  s = s.replace(/^(?:✍️\s*)?(?:وارد\s*کردن\s*دستی|enter\s*manually)$/i, "").trim();
+  if (isArtistButtonPlaceholder_(s)) return "";
+  return s;
+}
 function userFromRow_(r, i) {
   const truthy = function(v) { return v === true || String(v).toLowerCase() === "true"; };
   return {
     rowNumber: i + 2, userId: String(r[0] || ""), phone: String(r[1] || ""),
-    firstName: String(r[2] || ""), lastName: String(r[3] || ""), rapName: String(r[4] || ""),
+    firstName: String(r[2] || ""), lastName: String(r[3] || ""), rapName: sanitizeArtistName_(r[4] || ""),
     province: String(r[5] || ""), city: String(r[6] || ""), country: String(r[7] || ""), metaJson: String(r[25] || ""),
     passSalt: String(r[8] || ""), passHash: String(r[9] || ""), registeredAt: r[10] || "", lastSeen: r[11] || "",
     active: truthy(r[12]), blocked: truthy(r[13]), username: String(r[14] || ""),
@@ -1936,11 +1977,11 @@ function adminPermissionForCallback_(data) {
   if (d === "a:adminlog" || d === "a:errors" || d.indexOf("a:export:") === 0) return "settings";
   if (d === "a:admins" || d.indexOf("a:admin") === 0) return "admins";
   if (d === "a:users" || d.indexOf("a:list:") === 0 || d.indexOf("a:user:") === 0 || d.indexOf("u:") === 0 || d === "a:resets" || d.indexOf("a:reset:") === 0 || d.indexOf("r:approve:") === 0 || d.indexOf("r:reject:") === 0) return "users";
-  if (d === "a:submissions" || d.indexOf("a:sub") === 0 || d.indexOf("a:downloadtoggle:") === 0 || d.indexOf("a:comingsoon") === 0) return "submissions";
+  if (d === "a:submissions" || d.indexOf("a:sub") === 0 || d.indexOf("a:downloadtoggle:") === 0 || d.indexOf("a:comingsoon") === 0 || d.indexOf("a:freestyle") === 0 || d.indexOf("a:delapprove:") === 0 || d.indexOf("a:delreject:") === 0) return "submissions";
   if (d === "a:support" || d.indexOf("support:") === 0) return "support";
   if (d === "a:channel" || d === "a:comments" || d === "a:postbuttons" || d === "a:covertest" || d === "set:channel" || d === "set:footer" || d === "set:mode" || d.indexOf("set:mode:") === 0 || d === "set:interval" || d === "set:pubtoggle") return "channel";
   if (d === "a:settings" || d === "a:texts" || d.indexOf("set:") === 0 || d === "a:colors" || d.indexOf("color:") === 0 || d === "a:fj" || d.indexOf("fj:") === 0 || d === "a:inactive" || d.indexOf("set:inactive-") === 0 || d === "a:botmode" || d.indexOf("botmode:") === 0) return "settings";
-  if (d === "a:broadcast" || d === "a:campaigns" || d.indexOf("bc:") === 0 || d.indexOf("acc:") === 0 || d.indexOf("bn:") === 0) return "broadcast";
+  if (d === "a:broadcast" || d === "a:campaigns" || d.indexOf("bc:") === 0 || d.indexOf("acc:") === 0 || d.indexOf("bn:") === 0 || d.indexOf("ccp:") === 0) return "broadcast";
   return "settings";
 }
 function adminPermissionForState_(state, stateData) {
@@ -1954,7 +1995,7 @@ function adminPermissionForState_(state, stateData) {
   if (s.indexOf("ADM_EDIT_") === 0) return "submissions";
   // دلیل رد بخشی از گردش کار ارسال‌هاست؛ نقش publisher هم باید بتواند رد کند.
   if (s === "ADM_REJECT_REASON") return "submissions";
-  if (s === "ADM_CC_LIST" || s === "ADM_CC_MSG" || s === "ADM_CC_CONFIRM" || s === "ADM_CC_BANNER") return "broadcast";
+  if (s === "ADM_CC_LIST" || s === "ADM_CC_MSG" || s === "ADM_CC_SEND_ONE" || s === "ADM_CC_CONFIRM" || s === "ADM_CC_BANNER" || s === "ADM_CC_BANNER_PICK" || s === "ADM_CC_POST_EDIT") return "broadcast";
   if (s === "ADM_BROADCAST_CODE") return "broadcast";
   if (s === "ADM_DIRECT_MSG") return "users";
   if (/^ADM_(CHANNEL_|PUBLISH_INTERVAL)/.test(s)) return "channel";
@@ -2465,13 +2506,28 @@ function handleMessage_(message) {
   } else if (!rateAllow_("msg:" + uid, getSetting_("RATE_MSG_PER_MIN") || 25, 60)) {
     sendMessage_(chatId, t_(uid, "RATE_LIMITED")); return;
   }
-  const session = getSession_("M:" + uid); const admin = isAdmin_(uid);
+  let session = getSession_("M:" + uid); const admin = isAdmin_(uid);
   const authState = !!session && /^(AUTH_|REG_|LOGIN_|FORGOT_|MFA_)/.test(session.state);
   if (isCancelText_(text)) {
     if (admin && !isAdminAuthenticated_(uid)) { clearSession_("M:" + uid); requireAdminAuthentication_(chatId, uid, t_(uid, "ADMIN_LOGIN_CANCELLED")); return; }
     cancelCurrentFlow_(message, session, admin); return;
   }
   if (authState) { handleAuthMessage_(message, session); return; }
+  // اگر مدیر یا کاربر دکمهٔ منوی اصلی را زده باشد، در حالت‌های ویرایش/کانال/پشتیبانی گیر نکند
+  if (admin && isAdminAuthenticated_(uid) && isAdminMenuButtonText_(text)) {
+    if (isAdminSessionStale_(uid)) {
+      logoutUser_(uid); clearSession_("M:" + uid);
+      requireAdminAuthentication_(chatId, uid, t_(uid, "ADMIN_SESSION_EXPIRED")); return;
+    }
+    touchAdminSession_(uid);
+    if (session && String(session.state).indexOf("MUSIC_") === 0) cancelMusicDraft_(uid, session);
+    else if (session) clearSession_("M:" + uid);
+    handleAdminMenuMessage_(message); return;
+  }
+  if (!admin && session && isUserMenuButtonText_(text) && String(session.state).indexOf("MUSIC_") !== 0) {
+    clearSession_("M:" + uid);
+    session = null;
+  }
   if (session && session.state === "USR_WITHDRAW_CONFIRM") { handleWithdrawConfirm_(message, session); return; }
   if (session && String(session.state).indexOf("USR_EDIT_") === 0) {
     if (!isLoggedIn_(uid)) { clearSession_("M:" + uid); sendEntryCard_(chatId, t_(uid, "LOGIN_NEEDED")); return; }
@@ -2480,6 +2536,10 @@ function handleMessage_(message) {
   if (session && session.state === "CC_ADD") {
     if (!isLoggedIn_(uid)) { clearSession_("M:" + uid); sendEntryCard_(chatId, t_(uid, "LOGIN_NEEDED")); return; }
     handleConnectedChannelAdd_(message, session); return;
+  }
+  if (session && session.state === "CC_EDIT") {
+    if (!isLoggedIn_(uid)) { clearSession_("M:" + uid); sendEntryCard_(chatId, t_(uid, "LOGIN_NEEDED")); return; }
+    handleConnectedChannelEdit_(message, session); return;
   }
   if (admin && !isAdminAuthenticated_(uid)) {
     if (text === "🟡 ثبت‌نام / ورود" || text === "🟡 ثبت‌نام" || text === "🔑 ورود" || text === MSG.en.BTN_REGISTER) {
@@ -2504,6 +2564,9 @@ function handleMessage_(message) {
     handleAdminMenuMessage_(message); return;
   }
   const u = getUserById_(uid); const loggedIn = !!(u && isLoggedIn_(uid));
+  if (loggedIn && u && !u.blocked && u.active) {
+    verifyUserConnectedChannelsBanner_(uid, chatId);
+  }
   if (session && session.state === "USR_SUPPORT") {
     if (loggedIn) {
       if (u.blocked || !u.active) { sendMessage_(chatId, t_(uid, u.blocked ? "ACCOUNT_BLOCKED" : "ACCOUNT_INACTIVE")); return; }
@@ -2534,6 +2597,33 @@ function handleMessage_(message) {
   if (text === "📞 پشتیبانی" || text === MSG.en.BTN_SUPPORT) { startUserSupport_(chatId, uid); return; }
   handleUserMenuMessage_(message, u);
 }
+function isAdminMenuButtonText_(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (typeof isAdminMenuButton_ === "function" && isAdminMenuButton_(t)) return true;
+  return [
+    "👥 کاربران", "🎵 ارسال‌ها", "🗓 صف انتشار", "⏳ Coming Soon", "🎤 فری‌استایل", "🎤 فری‌استایل‌ها",
+    "📢 کانال‌های وصل‌شده", "🖼 بنر تبلیغاتی", "📣 پیام همگانی", "📣 ارسال همگانی", "💬 پشتیبانی",
+    "📺 کانال", "📝 متن‌ها", "⚙️ تنظیمات", "🎨 دکمه‌ها و رنگ‌ها",
+    "🌐 عضویت اجباری", "🔐 عضویت اجباری", "😴 غیرفعال‌ها", "🆘 درخواست‌های رمز", "🔑 رمزهای فراموش‌شده",
+    "🛡 دسترسی مدیران", "👮 مدیران", "🚦 وضعیت ربات", "📊 آمار", "🧹 نگهداری و بکاپ", "📚 آثار من"
+  ].indexOf(t) >= 0;
+}
+function isUserMenuButtonText_(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  return [
+    tr_("BTN_SEND_MUSIC", null, "fa"), MSG.en.BTN_SEND_MUSIC,
+    tr_("BTN_SEND_ALBUM", null, "fa"), MSG.en.BTN_SEND_ALBUM,
+    tr_("BTN_COMING_SOON", null, "fa"), MSG.en.BTN_COMING_SOON,
+    tr_("BTN_FREESTYLE", null, "fa"), MSG.en.BTN_FREESTYLE, "🎤 فری‌استایل",
+    tr_("BTN_MY_WORKS", null, "fa"), MSG.en.BTN_MY_WORKS,
+    tr_("BTN_MY_CHANNELS", null, "fa"), MSG.en.BTN_MY_CHANNELS,
+    tr_("BTN_PROFILE", null, "fa"), MSG.en.BTN_PROFILE,
+    tr_("BTN_SUPPORT", null, "fa"), MSG.en.BTN_SUPPORT, "📞 پشتیبانی",
+    tr_("BTN_LOGOUT", null, "fa"), MSG.en.BTN_LOGOUT
+  ].indexOf(t) >= 0;
+}
 function adminEntry_(chatId, uid) {
   if (!isAdminAuthenticated_(uid)) { requireAdminAuthentication_(chatId, uid); return; }
   if (isAdminSessionStale_(uid)) { logoutUser_(uid); requireAdminAuthentication_(chatId, uid, t_(uid, "ADMIN_SESSION_EXPIRED")); return; }
@@ -2545,7 +2635,17 @@ function adminEntry_(chatId, uid) {
 function handleCallbackQuery_(cb) {
   if (!cb || !cb.from) return;
   const uid = String(cb.from.id); const data = String(cb.data || ""); const chatId = cb.message && cb.message.chat ? String(cb.message.chat.id) : uid;
-  if (!isAdmin_(uid) && isLoggedIn_(uid) && getUserById_(uid)) touchUser_(uid);
+  const shouldCheckUserBanner = !isAdmin_(uid) && isLoggedIn_(uid) && !!getUserById_(uid);
+  if (shouldCheckUserBanner) touchUser_(uid);
+  try {
+    dispatchCallbackQuery_(cb, uid, data, chatId);
+  } finally {
+    if (shouldCheckUserBanner) {
+      try { verifyUserConnectedChannelsBanner_(uid, chatId); } catch (e) {}
+    }
+  }
+}
+function dispatchCallbackQuery_(cb, uid, data, chatId) {
   if (data === "fj:check") { handleJoinCallback_(cb); return; }
   if (data.indexOf("lg:") === 0) {
     const lang = data.split(":")[1] || "fa";
@@ -2565,7 +2665,7 @@ function handleCallbackQuery_(cb) {
   if (data.indexOf("p:") === 0) { handleProfileCallback_(cb); return; }
   if (data.indexOf("sdel:") === 0) { handleAccountDeleteCallback_(cb); return; }
   // توجه: «cb:» هم باید اینجا باشد، وگرنه دکمه‌های تنظیمات پست به هندلر مدیر نمی‌رسند.
-  if (/^(a|u|sub|set|fj|color|botmode|bc|r|support|cb|acc|bn):/.test(data)) {
+  if (/^(a|u|sub|set|fj|color|botmode|bc|r|support|cb|acc|bn|ccp):/.test(data)) {
     if (!isAdmin_(uid)) { answerCallbackQuery_(cb.id, t_(uid, "NO_ACCESS_BTN")); return; }
     if (!isAdminAuthenticated_(uid)) { answerCallbackQuery_(cb.id, t_(uid, "ADMIN_AUTH_NEEDED")); requireAdminAuthentication_(chatId, uid); return; }
     if (isAdminSessionStale_(uid)) { logoutUser_(uid); answerCallbackQuery_(cb.id, t_(uid, "ADMIN_SESSION_EXPIRED")); requireAdminAuthentication_(chatId, uid, t_(uid, "ADMIN_SESSION_EXPIRED")); return; }
@@ -3017,14 +3117,16 @@ function ownerChannelButtonRow_(sub) {
 function markConnectedChannelKicked_(row, err) {
   setConnectedChannelField_(row.id, "status", "kicked");
   setConnectedChannelField_(row.id, "lastError", truncate_(String(err || ""), 200));
+  try { deleteCoverNotifyFromMainChannel_(row.id); } catch (e) {}
   try { sendMessage_(row.userId, t_(row.userId, "CC_KICKED_NOTIFY", { t: row.title })); } catch (e) {}
 }
 function sendOwnerChannelPromo_(sub, postUrl) {
   if (String(getSetting_("CC_PROMO_MESSAGE") || "true") !== "true" || !postUrl || !sub) return;
+  const promoText = t_(sub.userId, "CC_PROMO_TEXT", { t: sub.title });
   getConnectedChannelsForUser_(sub.userId).forEach(function(ch) {
     let r = null;
     try {
-      r = sendMessage_(ch.chatId, t_(sub.userId, "CC_PROMO_TEXT", { t: sub.title }), { inline_keyboard: [[{ text: t_(sub.userId, "CC_PROMO_BTN"), url: postUrl }]] });
+      r = sendMessage_(ch.chatId, promoText, { inline_keyboard: [[{ text: t_(sub.userId, "CC_PROMO_BTN"), url: postUrl }]] });
     } catch (e) { r = null; }
     if (!r || !r.ok) {
       const desc = String(r && r.description || "");
@@ -3032,8 +3134,152 @@ function sendOwnerChannelPromo_(sub, postUrl) {
       else console.warn("cc promo failed: " + desc);
     } else {
       setConnectedChannelField_(ch.id, "lastOkAt", new Date());
+      if (r.result && r.result.message_id) {
+        recordCcPost_({
+          batchId: "PROMO_" + String(sub.id),
+          sourceType: "promo",
+          channelId: ch.id,
+          chatId: ch.chatId,
+          messageId: Number(r.result.message_id),
+          kind: "text",
+          caption: promoText,
+          fileId: "",
+          createdBy: String(sub.userId || "")
+        });
+      }
     }
   });
+}
+// ── ذخیره و مدیریت پیام‌های ارسال‌شده در کانال‌های وصل‌شده (CcPosts) ──
+function bustCcPostsCache_() { CC_POSTS_MEMO_ = null; }
+function extractMessageFileId_(message) {
+  if (!message) return "";
+  if (message.photo && message.photo.length) return String(message.photo[message.photo.length - 1].file_id || "");
+  if (message.video) return String(message.video.file_id || "");
+  if (message.audio) return String(message.audio.file_id || "");
+  if (message.document) return String(message.document.file_id || "");
+  if (message.voice) return String(message.voice.file_id || "");
+  return "";
+}
+function getCcPosts_() {
+  if (CC_POSTS_MEMO_) return CC_POSTS_MEMO_;
+  const sh = getSheet_(APP.SHEETS.CC_POSTS);
+  CC_POSTS_MEMO_ = sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.CcPosts.length).getValues().map(function(r, i) {
+    return {
+      rowNumber: i + 2,
+      postId: String(r[0] || ""),
+      batchId: String(r[1] || ""),
+      sourceType: String(r[2] || "message"),
+      channelId: String(r[3] || ""),
+      chatId: String(r[4] || ""),
+      messageId: Number(r[5]) || 0,
+      kind: String(r[6] || "text"),
+      caption: String(r[7] || ""),
+      fileId: String(r[8] || ""),
+      status: String(r[9] || "active"),
+      createdBy: String(r[10] || ""),
+      createdAt: r[11] || "",
+      updatedAt: r[12] || ""
+    };
+  }).filter(function(p) { return p.postId && p.messageId > 0; });
+  return CC_POSTS_MEMO_;
+}
+function getActiveCcPosts_() { return getCcPosts_().filter(function(p) { return p.status === "active"; }); }
+function getCcPostById_(postId) { return getCcPosts_().find(function(p) { return p.postId === String(postId); }) || null; }
+function recordCcPost_(o) {
+  try {
+    const sh = getSheet_(APP.SHEETS.CC_POSTS);
+    const now = new Date();
+    const postId = newId_("CP");
+    sh.appendRow([
+      postId,
+      String(o.batchId || postId),
+      String(o.sourceType || "message"),
+      String(o.channelId || ""),
+      String(o.chatId || ""),
+      Number(o.messageId) || 0,
+      String(o.kind || "text"),
+      String(o.caption || ""),
+      String(o.fileId || ""),
+      "active",
+      String(o.createdBy || ""),
+      now,
+      now
+    ]);
+    bustCcPostsCache_();
+    return postId;
+  } catch (e) { logError_("recordCcPost_", e); return ""; }
+}
+const CC_POST_COL_ = { messageId: 6, kind: 7, caption: 8, fileId: 9, status: 10, updatedAt: 13 };
+function setCcPostFields_(postId, patch) {
+  const row = getCcPostById_(postId);
+  if (!row || !patch) return false;
+  const sh = getSheet_(APP.SHEETS.CC_POSTS);
+  Object.keys(patch).forEach(function(k) {
+    if (CC_POST_COL_[k]) sh.getRange(row.rowNumber, CC_POST_COL_[k]).setValue(patch[k]);
+  });
+  sh.getRange(row.rowNumber, CC_POST_COL_.updatedAt).setValue(new Date());
+  bustCcPostsCache_();
+  return true;
+}
+function deleteCcPostRecord_(post) {
+  if (!post || post.status !== "active") return { ok: false, desc: "not active" };
+  const r = deleteMessage_(post.chatId, post.messageId);
+  const desc = String(r && r.description || "");
+  if ((r && r.ok) || /message to delete not found|message can't be deleted|message_id_invalid|message not found/i.test(desc)) {
+    setCcPostFields_(post.postId, { status: "deleted" });
+    return { ok: true, desc: "" };
+  }
+  return { ok: false, desc: desc };
+}
+function editCcPostRecord_(post, message) {
+  if (!post || post.status !== "active") return { ok: false, desc: "not active" };
+  const newKind = message.photo ? "photo" : message.audio ? "audio" : message.video ? "video" : message.voice ? "voice" : message.document ? "document" : (message.text ? "text" : "");
+  if (!newKind) return { ok: false, desc: "unsupported format" };
+  const newCaption = newKind === "text" ? String(message.text || "") : String(message.caption || "");
+  const newFileId = extractMessageFileId_(message);
+  if (newKind === "text") {
+    let r = null;
+    if (post.kind === "text") {
+      r = telegramRequest_("editMessageText", { chat_id: String(post.chatId), message_id: Number(post.messageId), text: newCaption, disable_web_page_preview: true });
+    } else {
+      r = telegramRequest_("editMessageCaption", { chat_id: String(post.chatId), message_id: Number(post.messageId), caption: newCaption });
+    }
+    const desc = String(r && r.description || "");
+    if ((r && r.ok) || /message is not modified/i.test(desc)) {
+      setCcPostFields_(post.postId, { caption: newCaption });
+      return { ok: true, desc: "" };
+    }
+    // پشتیبان: اگر ویرایش درجا ممکن نبود (مثلاً تغییر از عکس به متن یا محدودیت تلگرام)، پیام جدید بفرست و قبلی را پاک کن
+    const sent = sendMessage_(post.chatId, newCaption);
+    if (sent && sent.ok && sent.result && sent.result.message_id) {
+      deleteMessage_(post.chatId, post.messageId);
+      setCcPostFields_(post.postId, { messageId: Number(sent.result.message_id), kind: "text", caption: newCaption, fileId: "" });
+      return { ok: true, desc: "" };
+    }
+    return { ok: false, desc: desc || String(sent && sent.description || "edit failed") };
+  }
+  // اگر پیام قبلی هم رسانه بود و فرمت جدید قابلیت editMessageMedia درجا دارد
+  if (post.kind !== "text" && ["photo", "video", "audio", "document"].indexOf(newKind) >= 0 && newFileId) {
+    const r = telegramRequest_("editMessageMedia", {
+      chat_id: String(post.chatId),
+      message_id: Number(post.messageId),
+      media: JSON.stringify({ type: newKind, media: newFileId, caption: newCaption })
+    });
+    const desc = String(r && r.description || "");
+    if ((r && r.ok) || /message is not modified/i.test(desc)) {
+      setCcPostFields_(post.postId, { kind: newKind, caption: newCaption, fileId: newFileId });
+      return { ok: true, desc: "" };
+    }
+  }
+  // جایگزینی پیام (وقتی نوع پیام از متن به رسانه تغییر کرده یا ویس است)
+  const copied = copyMessage_(post.chatId, message.chat.id, message.message_id);
+  if (copied && copied.ok && copied.result && copied.result.message_id) {
+    deleteMessage_(post.chatId, post.messageId);
+    setCcPostFields_(post.postId, { messageId: Number(copied.result.message_id), kind: newKind, caption: newCaption, fileId: newFileId });
+    return { ok: true, desc: "" };
+  }
+  return { ok: false, desc: String(copied && copied.description || "edit failed") };
 }
 // ── بنر تبلیغاتی کانال ما (مدیر ثبت می‌کند؛ در همهٔ کانال‌های وصل‌شده پست می‌شود) ──
 function bustCcBannerCache_() { CC_BANNER_MEMO_ = null; }
@@ -3058,9 +3304,13 @@ function clearCcBanner_() {
   while (sh.getLastRow() > 1) sh.deleteRow(2);
   bustCcBannerCache_();
 }
-function sendCcBannerToChannel_(row) {
+function sendCcBannerToChannel_(row, opts) {
   const items = getCcBannerItems_();
-  if (!items.length) return { ok: true, sent: 0, desc: "" };
+  if (!items.length) return { ok: true, sent: 0, desc: "", postIds: [] };
+  const options = opts || {};
+  const shouldRecord = options.recordPost !== false && !!row.id;
+  const batchId = options.batchId || newId_("BP");
+  const postIds = [];
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     let r = null;
@@ -3070,14 +3320,30 @@ function sendCcBannerToChannel_(row) {
     } else {
       r = sendMessage_(row.chatId, it.caption);
     }
-    if (!r || !r.ok) return { ok: false, sent: i, desc: String(r && r.description || "") };
+    if (!r || !r.ok) return { ok: false, sent: i, desc: String(r && r.description || ""), postIds: postIds };
+    if (shouldRecord && r.result && r.result.message_id) {
+      const pid = recordCcPost_({
+        batchId: batchId,
+        sourceType: "banner",
+        channelId: row.id,
+        chatId: row.chatId,
+        messageId: Number(r.result.message_id),
+        kind: it.kind || "text",
+        caption: it.caption || "",
+        fileId: "",
+        createdBy: options.adminId || it.createdBy || ""
+      });
+      if (pid) postIds.push(pid);
+    }
   }
-  return { ok: true, sent: items.length, desc: "" };
+  if (row.id) { try { setConnectedChannelField_(row.id, "lastOkAt", new Date()); } catch (e) {} }
+  return { ok: true, sent: items.length, desc: "", batchId: batchId, postIds: postIds };
 }
-function sendCcBannerToAll_(rows) {
-  const out = { sent: 0, failed: 0, kicked: 0 };
+function sendCcBannerToAll_(rows, adminId) {
+  const batchId = newId_("BP");
+  const out = { sent: 0, failed: 0, kicked: 0, batchId: batchId };
   (rows || getActiveConnectedChannels_()).forEach(function(c) {
-    const r = sendCcBannerToChannel_(c);
+    const r = sendCcBannerToChannel_(c, { batchId: batchId, adminId: adminId || "" });
     if (r.ok) out.sent++;
     else {
       out.failed++;
@@ -3089,9 +3355,118 @@ function sendCcBannerToAll_(rows) {
 // اطلاع در کانال اصلی: «پوشش داده شد» + آیدی کانال کاربر
 function postCoverNotifyToMainChannel_(row, owner) {
   const channel = normalizeChannelId_(getSetting_("CHANNEL_ID"));
-  if (!channel) return;
+  if (!channel || !row) return;
+  const existing = getActiveCcPosts_().find(function(p) { return p.sourceType === "cover_notify" && p.channelId === String(row.id); });
+  if (existing) return;
   const lines = ["🤝 پوشش داده شد", "📺 " + (row.title || row.chatId) + (row.username ? " — @" + String(row.username).replace(/^@/, "") : ""), "🆔 " + row.chatId, "👤 " + ((owner && owner.rapName) || row.userId)];
-  try { sendMessage_(channel, lines.join("\n")); } catch (e) { logError_("postCoverNotifyToMainChannel_", e); }
+  try {
+    const r = sendMessage_(channel, lines.join("\n"));
+    if (r && r.ok && r.result && r.result.message_id) {
+      recordCcPost_({
+        batchId: "COV_" + String(row.id),
+        sourceType: "cover_notify",
+        channelId: row.id,
+        chatId: channel,
+        messageId: Number(r.result.message_id),
+        kind: "text",
+        caption: lines.join("\n"),
+        fileId: "",
+        createdBy: String(row.userId || "")
+      });
+    }
+  } catch (e) { logError_("postCoverNotifyToMainChannel_", e); }
+}
+function deleteCoverNotifyFromMainChannel_(channelId) {
+  let removed = 0;
+  getActiveCcPosts_().filter(function(p) { return p.sourceType === "cover_notify" && p.channelId === String(channelId); }).forEach(function(p) {
+    const r = deleteCcPostRecord_(p);
+    if (r.ok) removed++;
+  });
+  return removed;
+}
+// بررسی اینکه آیا پیام بنر در کانال کاربر هنوز وجود دارد یا توسط کاربر پاک شده است
+function checkChannelMessageExists_(chatId, messageId) {
+  if (!chatId || !messageId) return { exists: false, reason: "deleted" };
+  // ۱) بررسی بی‌سر و صدا با setMessageReaction (بدون هیچ تغییری در متن، رسانه یا دکمه‌های پیام)
+  const r = telegramRequest_("setMessageReaction", {
+    chat_id: String(chatId),
+    message_id: Number(messageId),
+    reaction: JSON.stringify([])
+  });
+  if (r && r.ok) return { exists: true, reason: "ok" };
+  const desc = String((r && r.description) || "");
+  if (/message to react not found|message_id_invalid|message not found|message to edit not found|message can't be found/i.test(desc)) {
+    return { exists: false, reason: "deleted" };
+  }
+  if (/kicked|not enough rights|chat not found|forbidden|have the right/i.test(desc)) {
+    return { exists: false, reason: "kicked", desc: desc };
+  }
+  if (/reaction_invalid|reactions_too_many|reactions are disabled/i.test(desc)) {
+    return { exists: true, reason: "ok" };
+  }
+  // ۲) پشتیبان: بررسی با editMessageReplyMarkup
+  const r2 = telegramRequest_("editMessageReplyMarkup", {
+    chat_id: String(chatId),
+    message_id: Number(messageId),
+    reply_markup: { inline_keyboard: [] }
+  });
+  if (r2 && r2.ok) return { exists: true, reason: "ok" };
+  const desc2 = String((r2 && r2.description) || "");
+  if (/message is not modified|message can't be edited/i.test(desc2)) return { exists: true, reason: "ok" };
+  if (/message to edit not found|message_id_invalid|message not found/i.test(desc2)) return { exists: false, reason: "deleted" };
+  if (/kicked|not enough rights|chat not found|forbidden|have the right/i.test(desc2)) return { exists: false, reason: "kicked", desc: desc2 };
+  return { exists: true, reason: "unknown" };
+}
+// در هر تعامل کاربر با بات، بررسی می‌شود که بنر تبلیغاتی ما از کانال‌های متصل او پاک نشده باشد
+function verifyUserConnectedChannelsBanner_(uid, notifyChatId) {
+  try {
+    if (!uid || isAdmin_(uid)) return;
+    const channels = getConnectedChannelsForUser_(uid);
+    if (!channels.length) return;
+    const bannerItems = getCcBannerItems_();
+    const bannerEnabled = String(getSetting_("CC_BANNER_ON_CONNECT") || "true") === "true" && bannerItems.length > 0;
+    channels.forEach(function(ch) {
+      const bannerPosts = getActiveCcPosts_().filter(function(p) {
+        return p.sourceType === "banner" && (p.channelId === String(ch.id) || p.chatId === String(ch.chatId));
+      }).sort(function(a, b) { return dateMillis_(b.createdAt) - dateMillis_(a.createdAt); });
+
+      if (bannerPosts.length) {
+        const latestBanner = bannerPosts[0];
+        const chk = checkChannelMessageExists_(ch.chatId, latestBanner.messageId);
+        if (!chk.exists && chk.reason === "kicked") {
+          bannerPosts.forEach(function(bp) { setCcPostFields_(bp.postId, { status: "deleted" }); });
+          deleteCoverNotifyFromMainChannel_(ch.id);
+          markConnectedChannelKicked_(ch, chk.desc || "kicked");
+          return;
+        }
+        if (!chk.exists && chk.reason === "deleted") {
+          // کاربر بنر ما را از کانالش پاک کرده است:
+          // ۱) بنرهای قبلی در شیت به وضعیت deleted درمی‌آیند
+          bannerPosts.forEach(function(bp) { setCcPostFields_(bp.postId, { status: "deleted" }); });
+          // ۲) پیام «پوشش داده شد» مربوط به این کانال از کانال اصلی ما حذف می‌شود
+          deleteCoverNotifyFromMainChannel_(ch.id);
+          // ۳) بلافاصله یک بنر جدید در کانالش ارسال و آیدی پیام جدید ثبت می‌شود (تا اگر باز پاک کرد تشخیص دهد)
+          if (bannerEnabled) {
+            const resent = sendCcBannerToChannel_(ch);
+            if (!resent.ok && /kicked|not enough rights|chat not found|forbidden|have the right|admin/i.test(resent.desc)) {
+              markConnectedChannelKicked_(ch, resent.desc);
+              return;
+            }
+          }
+          // ۴) اخطار به کاربر در بات
+          const targetChat = String(notifyChatId || uid);
+          sendMessage_(targetChat, t_(uid, "CC_BANNER_DELETED_WARN", { t: ch.title || ch.chatId }));
+        }
+      } else if (bannerEnabled) {
+        // اگر بنر فعال است ولی این کانال هنوز بنر فعالی ندارد، بنر را بفرست و ثبت کن
+        const sent = sendCcBannerToChannel_(ch);
+        if (!sent.ok && /kicked|not enough rights|chat not found|forbidden|have the right|admin/i.test(sent.desc)) {
+          deleteCoverNotifyFromMainChannel_(ch.id);
+          markConnectedChannelKicked_(ch, sent.desc);
+        }
+      }
+    });
+  } catch (e) { logError_("verifyUserConnectedChannelsBanner_", e, { userId: uid }); }
 }
 // بعد از اتصال موفق: بنر (اگر ثبت شده و روشن) در همان کانال + اطلاع پوشش در کانال اصلی
 function ccFinishConnect_(row) {
@@ -3104,6 +3479,14 @@ function ccFinishConnect_(row) {
   }
   postCoverNotifyToMainChannel_(row, getUserById_(row.userId));
   return { ok: true, row: row, banner: "sent" };
+}
+function disconnectChannelCompletely_(row) {
+  if (!row) return;
+  setConnectedChannelField_(row.id, "status", "removed");
+  deleteCoverNotifyFromMainChannel_(row.id);
+  getActiveCcPosts_().filter(function(p) { return p.sourceType !== "cover_notify" && (p.channelId === String(row.id) || p.chatId === String(row.chatId)); }).forEach(function(p) {
+    deleteCcPostRecord_(p);
+  });
 }
 function connectChannelForUser_(uid, input) {
   const raw = String(input || "").trim();
@@ -3174,7 +3557,7 @@ function handleUserMenuMessage_(message, user) {
   if (text === tr_("BTN_SUPPORT", null, "fa") || text === MSG.en.BTN_SUPPORT || text === "📞 پشتیبانی") { startUserSupport_(chatId, uid); return; }
   showUserMenu_(chatId, lang === "en" ? "" : "");
 }
-// ───────────────────────── کانال‌های وصل‌شده (سمت کاربر) ─────────────────────────
+// ───────────────────────── کانال‌های وصل‌شده (سمت کاربر / هنرمند) ─────────────────────────
 function showMyChannels_(chatId, uid) {
   const list = getConnectedChannelsForUser_(uid);
   const max = Math.max(1, Number(getSetting_("CONNECTED_CHANNELS_MAX") || 3));
@@ -3185,8 +3568,12 @@ function showMyChannels_(chatId, uid) {
   const lines = [t_(uid, "CC_LIST_TITLE") + " — " + list.length + "/" + max];
   const rows = [];
   list.forEach(function(c) {
+    const shortTitle = truncate_(c.title || c.chatId, 18);
     lines.push("📺 " + (c.title || c.chatId) + (c.username ? " — @" + String(c.username).replace(/^@/, "") : " (خصوصی)") + "\n   👥 " + (c.members || 0) + " · 🗓 " + formatDate_(c.connectedAt));
-    rows.push([{ text: "🗑 جداسازی: " + truncate_(c.title || c.chatId, 24), callback_data: "myc:rm:" + c.id }]);
+    rows.push([
+      { text: "✏️ ویرایش «" + shortTitle + "»", callback_data: "myc:edit:" + c.id },
+      { text: "🗑 حذف «" + shortTitle + "»", callback_data: "myc:rm:" + c.id }
+    ]);
   });
   if (list.length < max) rows.push([{ text: "➕ " + t_(uid, "CC_GATE_BTN"), callback_data: "myc:add" }]);
   rows.push([{ text: "🏠 منو", callback_data: "myc:home" }]);
@@ -3198,21 +3585,51 @@ function handleMyChannelsCallback_(cb) {
   if (!isLoggedIn_(uid)) { answerCallbackQuery_(cb.id, t_(uid, "LOGIN_NEEDED")); return; }
   const parts = String(cb.data || "").split(":");
   const action = parts[1] || "list";
-  if (action === "home") { answerCallbackQuery_(cb.id); showUserMenu_(chatId); return; }
+  if (action === "home") { clearSession_("M:" + uid); answerCallbackQuery_(cb.id); showUserMenu_(chatId); return; }
   if (action === "add") {
     answerCallbackQuery_(cb.id);
     setSession_("M:" + uid, "CC_ADD", {});
     sendMessage_(chatId, t_(uid, "CC_ADD_ASK"), cancelKeyboard_());
     return;
   }
+  if (action === "edit") {
+    const row = getConnectedChannelById_(parts[2] || "");
+    if (!row || row.userId !== uid || row.status !== "active") { answerCallbackQuery_(cb.id, t_(uid, "EXPIRED_BTN")); showMyChannels_(chatId, uid); return; }
+    answerCallbackQuery_(cb.id);
+    setSession_("M:" + uid, "CC_EDIT", { channelId: row.id });
+    sendMessage_(chatId, t_(uid, "CC_EDIT_ASK", { t: row.title || row.chatId }), {
+      inline_keyboard: [
+        [{ text: "🔄 همگام‌سازی نام/آیدی همین کانال از تلگرام", callback_data: "myc:sync:" + row.id }],
+        [{ text: "⬅️ انصراف و بازگشت", callback_data: "myc:list" }]
+      ]
+    });
+    return;
+  }
+  if (action === "sync") {
+    const row = getConnectedChannelById_(parts[2] || "");
+    if (!row || row.userId !== uid || row.status !== "active") { answerCallbackQuery_(cb.id, t_(uid, "EXPIRED_BTN")); showMyChannels_(chatId, uid); return; }
+    const chat = telegramRequest_("getChat", { chat_id: row.chatId });
+    if (chat && chat.ok && chat.result) {
+      setConnectedChannelField_(row.id, "title", String(chat.result.title || row.title || ""));
+      setConnectedChannelField_(row.id, "username", String(chat.result.username || ""));
+      setConnectedChannelField_(row.id, "lastOkAt", new Date());
+    }
+    clearSession_("M:" + uid);
+    const updated = getConnectedChannelById_(row.id) || row;
+    answerCallbackQuery_(cb.id, t_(uid, "CC_SYNC_OK", { t: updated.title || updated.chatId }));
+    showMyChannels_(chatId, uid);
+    return;
+  }
   if (action === "rm") {
     const row = getConnectedChannelById_(parts[2] || "");
     if (!row || row.userId !== uid) { answerCallbackQuery_(cb.id, t_(uid, "EXPIRED_BTN")); return; }
-    setConnectedChannelField_(row.id, "status", "removed");
+    disconnectChannelCompletely_(row);
+    clearSession_("M:" + uid);
     answerCallbackQuery_(cb.id, t_(uid, "CC_RM_OK", { t: row.title }));
     showMyChannels_(chatId, uid);
     return;
   }
+  clearSession_("M:" + uid);
   answerCallbackQuery_(cb.id);
   showMyChannels_(chatId, uid);
 }
@@ -3221,7 +3638,32 @@ function handleConnectedChannelAdd_(message, session) {
   const res = connectChannelForUser_(uid, message.text || "");
   if (!res.ok) { sendMessage_(chatId, t_(uid, res.code, { n: res.n || "" }), cancelKeyboard_()); return; }
   clearSession_("M:" + uid);
-  sendMessage_(chatId, t_(uid, "CC_ADD_OK", { t: res.row.title }));
+  sendMessage_(chatId, t_(uid, "CC_ADD_OK", { t: res.row.title }), userKeyboard_(uid));
+  showMyChannels_(chatId, uid);
+}
+function handleConnectedChannelEdit_(message, session) {
+  const uid = String(message.from.id); const chatId = String(message.chat.id);
+  const data = (session && session.data) || {};
+  const oldRow = getConnectedChannelById_(data.channelId || "");
+  if (!oldRow || oldRow.userId !== uid || oldRow.status !== "active") {
+    clearSession_("M:" + uid);
+    showMyChannels_(chatId, uid);
+    return;
+  }
+  const oldTitle = oldRow.title || oldRow.chatId;
+  // موقتاً کانال قبلی را غیرفعال می‌کنیم تا سقف کانال‌ها (CONNECTED_CHANNELS_MAX) مانع جایگزینی نشود
+  setConnectedChannelField_(oldRow.id, "status", "replacing");
+  const res = connectChannelForUser_(uid, message.text || "");
+  if (!res.ok) {
+    setConnectedChannelField_(oldRow.id, "status", "active");
+    sendMessage_(chatId, t_(uid, res.code, { n: res.n || "" }), cancelKeyboard_());
+    return;
+  }
+  if (String(res.row.id) !== String(oldRow.id)) {
+    disconnectChannelCompletely_(oldRow);
+  }
+  clearSession_("M:" + uid);
+  sendMessage_(chatId, t_(uid, "CC_EDIT_OK", { old: oldTitle, t: res.row.title }), userKeyboard_(uid));
   showMyChannels_(chatId, uid);
 }
 function showProfile_(chatId, uid, user) {
@@ -3917,12 +4359,22 @@ function getMaxAudioMb_() { return Math.max(1, Math.min(200, Number(getSetting_(
 function startMusicFlow_(chatId, uid, mode) {
   if (ccGateRequired_(uid)) { showConnectedGate_(chatId, uid); return; }
   const user = getUserById_(uid);
-  if (!user) { sendEntryCard_(chatId); return; }
+  if (!user && !isAdmin_(uid)) { sendEntryCard_(chatId); return; }
   const active = getSession_("M:" + uid);
   if (active && String(active.state).indexOf("MUSIC_") === 0) {
     const draft = getMusicDraft_((active.data || {}).draftId);
-    if (draft && draft.status === "open") { sendMessage_(chatId, t_(uid, "DRAFT_OPEN")); return; }
-    clearSession_("M:" + uid);
+    if (draft && draft.status === "open") {
+      const hasMedia = getDraftMedia_(draft.draftId).length > 0;
+      const hasTitle = !!String((draft.data || {}).title || "").trim();
+      if (!hasMedia && !hasTitle) {
+        cancelMusicDraft_(uid, active);
+      } else {
+        sendMessage_(chatId, t_(uid, "DRAFT_OPEN"), musicStepKeyboard_(uid, active.state, draft.mode));
+        return;
+      }
+    } else {
+      clearSession_("M:" + uid);
+    }
   }
   const recent = getAllSubmissions_().filter(function(s) { return String(s.userId) === uid && dateMillis_(s.createdAt) > nowMs_() - 86400000; }).length;
   const dailyLimit = Number(getSetting_("MAX_SUBMISSIONS_PER_DAY") || 5);
@@ -4100,7 +4552,12 @@ function musicStepKeyboard_(uid, step, mode) {
     rows.push([{ text: tr_("BTN_NEXT", null, lang) }]);
   }
   else if (st === "MUSIC_ARTISTS") {
-    rows.push([{ text: tr_("BTN_ARTIST_PROFILE", null, lang), }, { text: tr_("BTN_ARTIST_MANUAL", null, lang) }]);
+    const profileRap = sanitizeArtistName_((getUserById_(uid) || {}).rapName || "");
+    if (profileRap) {
+      rows.push([{ text: tr_("BTN_ARTIST_PROFILE", null, lang) }, { text: tr_("BTN_ARTIST_MANUAL", null, lang) }]);
+    } else {
+      rows.push([{ text: tr_("BTN_ARTIST_MANUAL", null, lang) }]);
+    }
     rows.push([{ text: tr_("BTN_NEXT", null, lang) }]);
   }
   else if (st === "MUSIC_TITLE") rows.push([{ text: tr_("BTN_NEXT", null, lang) }]);
@@ -4139,7 +4596,8 @@ function stepPrompt_(uid, draft, step) {
   if (st === "MUSIC_COVER") return coverStepPrompt_(uid, draft);
   if (st === "MUSIC_AUDIO") return audioStepPrompt_(uid, draft);
   const suggestedTitle = d.title || String(firstCaptionLine_(getDraftMedia_(draft.draftId)) || "").trim();
-  const userName = (getUserById_(uid) || {}).rapName || "";
+  const userName = sanitizeArtistName_((getUserById_(uid) || {}).rapName || "");
+  const currentArtists = sanitizeArtistName_(d.artists || "");
   if (step === "MUSIC_TITLE") {
     return "📀 " + (lang === "en" ? "Send the track title." : "عنوان موزیک را بفرست.")
       + (suggestedTitle ? "\n\n" + (lang === "en" ? "Suggested: " : "پیشنهاد: ") + "«" + suggestedTitle + "»" : "");
@@ -4148,10 +4606,10 @@ function stepPrompt_(uid, draft, step) {
     // دو گزینه: دریافت از پروفایل یا ورود دستی. برای کاربران قدیمی با rapName خالی، پیام یکباره.
     if (!String(userName||"").trim()) {
       return "🎤 " + (lang === "en" ? "Your profile has no artist name. Please enter it once to save:" : "🎤 نام هنری شما در پروفایل ثبت نشده. لطفاً برای یکبار نام هنری خود را وارد کن تا در پروفایل ذخیره شود:")
-        + (d.artists ? "\n\n" + (lang === "en" ? "Current: " : "فعلی: ") + "«" + d.artists + "»" : "");
+        + (currentArtists ? "\n\n" + (lang === "en" ? "Current: " : "فعلی: ") + "«" + currentArtists + "»" : "");
     }
     return "🎤 " + (lang === "en" ? "Send the artist name(s). You can use «Artist: A & B»." : "نام هنرمند(ها) را بفرست. می‌توانی از «هنرمند: …» هم استفاده کنی.")
-      + (d.artists ? "\n\n" + (lang === "en" ? "Current: " : "فعلی: ") + "«" + d.artists + "»" : userName ? "\n\n" + (lang === "en" ? "Suggested: " : "پیشنهاد: ") + "«" + userName + "»" : "")
+      + (currentArtists ? "\n\n" + (lang === "en" ? "Current: " : "فعلی: ") + "«" + currentArtists + "»" : userName ? "\n\n" + (lang === "en" ? "Suggested: " : "پیشنهاد: ") + "«" + userName + "»" : "")
       + "\n\n" + tr_("BTN_ARTIST_PROFILE", null, lang) + " / " + tr_("BTN_ARTIST_MANUAL", null, lang);
   }
   if (step === "MUSIC_FEAT") return "🎧 " + (lang === "en" ? "Featuring artist(s)? Send names or tap Skip." : "هنرمند همراه (feat) داری؟ نام را بفرست یا «⏭ رد کردن» را بزن.");
@@ -4204,7 +4662,7 @@ function validateCoverStep_(chatId, uid, draft) {
   draft.data.noCover = !covers.length;
   // عنوان پیشنهادی از کپشن اولین رسانه (بدون اجبار)
   if (!draft.data.title) draft.data.title = String(firstCaptionLine_(media) || "").trim();
-  if (!draft.data.artists) draft.data.artists = String((getUserById_(uid) || {}).rapName || "").trim();
+  draft.data.artists = sanitizeArtistName_(draft.data.artists || (getUserById_(uid) || {}).rapName || "");
   saveMusicDraft_(draft);
   return true;
 }
@@ -4231,6 +4689,7 @@ function advanceMusicStep_(chatId, uid, draft, session, force) {
     sendMessage_(chatId, t_(uid, "SUBMIT_TITLE_ASK"), musicStepKeyboard_(uid, "MUSIC_TITLE", draft.mode));
     return;
   }
+  draft.data.artists = sanitizeArtistName_(draft.data.artists || "");
   if (step === "MUSIC_ARTISTS" && !String(draft.data.artists || "").trim()) {
     sendMessage_(chatId, t_(uid, "SUBMIT_ARTIST_ASK"), musicStepKeyboard_(uid, "MUSIC_ARTISTS", draft.mode));
     return;
@@ -4291,9 +4750,20 @@ function handleMusicMessage_(message, session) {
     sendMessage_(chatId, t_(uid, "STEP_MEDIA_WRONG_STAGE", { s: stepLabel_(uid, state), w: stepAcceptLabel_(uid, state) }), musicStepKeyboard_(uid, state, draft.mode));
     return;
   }
-  // اگر کاربر وسط پیش‌نویس دکمهٔ منو را بزند، به‌جای تفسیر آن به‌عنوان لینک راهنمایی می‌شود.
-  const menuButtonTexts = ["🎵 ارسال موزیک", "🎼 ارسال آلبوم", "⏳ Coming Soon", "🎤 فری‌استایل", MSG.en.BTN_FREESTYLE, "📚 آثار من", "📞 پشتیبانی", "👤 پروفایل", "🚪 خروج", "🟡 ثبت‌نام / ورود", "🆘 فراموشی رمز", MSG.en.BTN_SEND_MUSIC, MSG.en.BTN_SEND_ALBUM, MSG.en.BTN_MY_WORKS, MSG.en.BTN_PROFILE, MSG.en.BTN_LOGOUT, MSG.en.BTN_SUPPORT, "🎵 ارسال‌ها", "⚙️ تنظیمات"];
-  if (menuButtonTexts.indexOf(text) >= 0) { sendMessage_(chatId, t_(uid, "DRAFT_MENU_HINT"), musicStepKeyboard_(uid, state)); return; }
+  // اگر کاربر وسط پیش‌نویس دکمهٔ منو را بزند، اگر پیش‌نویس هنوز خالی است خودکار لغو و به منو می‌رود؛
+  // وگرنه کیبورد مرحله (همراه با دکمهٔ لغو) دوباره نمایش داده می‌شود.
+  const menuButtonTexts = ["🎵 ارسال موزیک", "🎼 ارسال آلبوم", "⏳ Coming Soon", "🎤 فری‌استایل", MSG.en.BTN_FREESTYLE, "📚 آثار من", "🎼 آثار من", "📢 کانال‌های من", MSG.fa.BTN_MY_CHANNELS, MSG.en.BTN_MY_CHANNELS, "📞 پشتیبانی", "👤 پروفایل", "🚪 خروج", "🟡 ثبت‌نام / ورود", "🆘 فراموشی رمز", MSG.en.BTN_SEND_MUSIC, MSG.en.BTN_SEND_ALBUM, MSG.en.BTN_MY_WORKS, MSG.en.BTN_PROFILE, MSG.en.BTN_LOGOUT, MSG.en.BTN_SUPPORT, "🎵 ارسال‌ها", "⚙️ تنظیمات"];
+  if (menuButtonTexts.indexOf(text) >= 0) {
+    const hasMedia = getDraftMedia_(draft.draftId).length > 0;
+    const hasTitle = !!String((draft.data || {}).title || "").trim();
+    if (!hasMedia && !hasTitle) {
+      cancelMusicDraft_(uid, session);
+      if (isAdmin_(uid) && isAdminAuthenticated_(uid)) { handleAdminMenuMessage_(message); return; }
+      const usr = getUserById_(uid);
+      if (usr) { handleUserMenuMessage_(message, usr); return; }
+    }
+    sendMessage_(chatId, t_(uid, "DRAFT_MENU_HINT"), musicStepKeyboard_(uid, state, draft.mode)); return;
+  }
   // در مراحل عنوان/هنرمند/فیچرینگ فقط کلیدهای شناخته‌شده تفسیر می‌شوند؛
   // پس «Intro: Dawn» عیناً عنوان می‌شود و به‌عنوان «عوامل» بلعیده نمی‌شود.
   const strictState = ["MUSIC_TITLE", "MUSIC_ARTISTS", "MUSIC_FEAT"].indexOf(state) >= 0;
@@ -4330,9 +4800,11 @@ function handleMusicMessage_(message, session) {
   if (state === "MUSIC_ARTISTS") {
     const btnProfile = tr_("BTN_ARTIST_PROFILE", null, lang);
     const btnManual = tr_("BTN_ARTIST_MANUAL", null, lang);
+    const isProfileBtn = text === btnProfile || text === t_(uid, "BTN_ARTIST_PROFILE") || text === MSG.fa.BTN_ARTIST_PROFILE || text === MSG.en.BTN_ARTIST_PROFILE || /^(?:👤\s*)?(?:دریافت(?:\s*شده)?\s*از\s*پروفایل|from\s*profile|taken\s*from\s*profile)$/i.test(text);
+    const isManualBtn = text === btnManual || text === t_(uid, "BTN_ARTIST_MANUAL") || text === MSG.fa.BTN_ARTIST_MANUAL || text === MSG.en.BTN_ARTIST_MANUAL || /^(?:✍️\s*)?(?:وارد\s*کردن\s*دستی|enter\s*manually)$/i.test(text);
     // انتخاب از پروفایل
-    if (text === btnProfile) {
-      const rap = String((getUserById_(uid) || {}).rapName || "").trim();
+    if (isProfileBtn) {
+      const rap = sanitizeArtistName_((getUserById_(uid) || {}).rapName || "");
       if (!rap) {
         sendMessage_(chatId, tr_("ARTIST_PROFILE_MISSING", null, lang), musicStepKeyboard_(uid, state, draft.mode));
         return;
@@ -4343,26 +4815,32 @@ function handleMusicMessage_(message, session) {
       setSession_("M:" + uid, "MUSIC_FEAT", { draftId: draft.draftId });
       sendMessage_(chatId, stepPrompt_(uid, draft, "MUSIC_FEAT"), musicStepKeyboard_(uid, "MUSIC_FEAT", draft.mode)); return;
     }
-    if (text === btnManual) {
+    if (isManualBtn) {
       sendMessage_(chatId, tr_("ARTIST_MANUAL_PROMPT", null, lang), musicStepKeyboard_(uid, state, draft.mode));
       return;
     }
-    const artists = truncate_(stripLinks_(meta && meta.artists ? String(meta.artists) : text), 80);
+    const rawArtists = truncate_(stripLinks_(meta && meta.artists ? String(meta.artists) : text), 80);
+    const artists = sanitizeArtistName_(rawArtists);
     if (artists.length < 2) { sendMessage_(chatId, t_(uid, "SUBMIT_ARTIST_ASK"), musicStepKeyboard_(uid, state, draft.mode)); return; }
     draft.data.artists = artists;
-    // برای کاربران قدیمی با rapName خالی: همین ورودی دستی را در پروفایل ذخیره کن (یک بار)
+    // برای کاربران قدیمی با rapName خالی یا 오염‌شده: همین ورودی دستی را در پروفایل ذخیره کن
     try {
       const u = getUserById_(uid);
-      if (u && !String(u.rapName||"").trim()) { withLock_(function(){ setUserField_(uid, "rapName", truncate_(artists,60)); }); }
+      if (u && !sanitizeArtistName_(u.rapName || "")) { withLock_(function(){ setUserField_(uid, "rapName", truncate_(artists,60)); }); }
     } catch(e){}
     saveMusicDraft_(draft);
     setSession_("M:" + uid, "MUSIC_FEAT", { draftId: draft.draftId });
     sendMessage_(chatId, stepPrompt_(uid, draft, "MUSIC_FEAT"), musicStepKeyboard_(uid, "MUSIC_FEAT", draft.mode)); return;
   }
   if (state === "MUSIC_FEAT") {
+    // اگر کاربر دو بار روی «👤 دریافت از پروفایل» یا «✍️ وارد کردن دستی» زده باشد، نباید به‌عنوان feat ذخیره شود
+    if (isArtistButtonPlaceholder_(text)) {
+      sendMessage_(chatId, stepPrompt_(uid, draft, "MUSIC_FEAT"), musicStepKeyboard_(uid, "MUSIC_FEAT", draft.mode));
+      return;
+    }
     // نام همراه ذخیره می‌شود ولی مرحله عوض نمی‌شود تا کاربر «بعدی» را بزند؛
     // قبلاً خودکار می‌رفت و تستِ «Elio → بعدی → عوامل» یک مرحله جلو می‌افتاد.
-    const feat = truncate_(stripLinks_(meta && meta.featuring ? String(meta.featuring) : text), 80);
+    const feat = sanitizeArtistName_(truncate_(stripLinks_(meta && meta.featuring ? String(meta.featuring) : text), 80));
     if (!feat) { sendMessage_(chatId, stepPrompt_(uid, draft, "MUSIC_FEAT"), musicStepKeyboard_(uid, "MUSIC_FEAT")); return; }
     draft.data.featuring = feat; saveMusicDraft_(draft);
     sendMessage_(chatId, "✅ ذخیره شد: 🎧 همراه «" + feat + "»\nبرای ادامه «➡️ مرحلهٔ بعد» را بزن.", musicStepKeyboard_(uid, "MUSIC_FEAT")); return;
@@ -4911,7 +5389,11 @@ function enqueueMusicDeletion_(userId, submissionId, messageIds, deleteAfterMs) 
   // برای جلوگیری از انفجار تریگرها، اگر تریگر فعالی هست به آن اکتفا می‌کنیم؛ وگرنه یکی می‌سازیم.
   if (!findTriggersByHandler_("deleteExpiredMusicDeliveries_").length) scheduleMusicDeletionTrigger_(deleteAfter);
 }
-function findTriggersByHandler_(handler) { return ScriptApp.getProjectTriggers().filter(function(t) { return t.getHandlerFunction() === handler; }); }
+function findTriggersByHandler_(handler) {
+  const list = safeGetProjectTriggers_();
+  if (!list) return [];
+  return list.filter(function(t) { try { return t.getHandlerFunction() === handler; } catch (e) { return false; } });
+}
 function pruneTrigger_(handler, keepAtMost) {
   const list = findTriggersByHandler_(handler);
   const max = Math.max(1, Number(keepAtMost) || 1);
@@ -4927,7 +5409,11 @@ function scheduleMusicDeletionTrigger_(when) {
   // حالا اول می‌سازیم و بعد فقط قدیمی‌ترها را نگه می‌داریم (کمترین فاصله تا اجرا).
   let created = null;
   try { created = ScriptApp.newTrigger("deleteExpiredMusicDeliveries_").timeBased().after(delay).create(); }
-  catch (e) { logError_("scheduleMusicDeletionTrigger_", e); }
+  catch (e) {
+    if (!/Unable to talk to trigger service/i.test(String(e && e.message || e || ""))) {
+      logError_("scheduleMusicDeletionTrigger_", e);
+    }
+  }
   // حداکثر ۲ تریگر کافی است؛ بقیه پاک می‌شوند (سهمیهٔ ۲۰ تریگر).
   const list = findTriggersByHandler_("deleteExpiredMusicDeliveries_");
   for (let i = 0; i < list.length - 2; i++) { try { ScriptApp.deleteTrigger(list[i]); } catch (e) {} }
@@ -4940,7 +5426,7 @@ function deleteExpiredMusicDeliveries_(e) {
   const selfUid = e && e.triggerUid ? String(e.triggerUid) : "";
   if (selfUid) {
     try {
-      ScriptApp.getProjectTriggers().forEach(function(t) {
+      (safeGetProjectTriggers_() || []).forEach(function(t) {
         try { if (String(t.getUniqueId && t.getUniqueId() || "") === selfUid) ScriptApp.deleteTrigger(t); } catch (err) {}
       });
     } catch (err) {}
@@ -4985,7 +5471,9 @@ function handleMusicDownloadDelivery_(chatId, uid, trackIdOrSubmissionId) {
   // عنوان/هنرمند کاربر باید escape شود، وگرنه یک «<» یا «&» کل ارسال را با خطای parse شکست می‌دهد.
   const safeTitle = htmlEscape_(title);
   const safeArtists = htmlEscape_(artists);
-  const caption = isAlbum ? t_(uid, "DOWNLOAD_ALBUM_CAPTION", { t: safeTitle, a: safeArtists, n: seconds }) : t_(uid, "DOWNLOAD_CAPTION", { t: safeTitle, a: safeArtists, n: seconds });
+  const tgTarget = getChannelTelegramTarget_() || { url: "https://t.me/RapEvils", label: "Telegram · @RapEvils" };
+  const tgLine = "🔵 " + linkHtml_(tgTarget.url, tgTarget.label);
+  const caption = isAlbum ? t_(uid, "DOWNLOAD_ALBUM_CAPTION", { t: safeTitle, a: safeArtists, n: seconds, tg: tgLine }) : t_(uid, "DOWNLOAD_CAPTION", { t: safeTitle, a: safeArtists, n: seconds, tg: tgLine });
   const sentIds = [];
   if (isAlbum) {
     for (let i = 0; i < tracks.length; i += 10) {
@@ -5033,13 +5521,13 @@ function handleMusicDownloadDelivery_(chatId, uid, trackIdOrSubmissionId) {
 //   ❤️ اگر این آهنگ را دوست داشتی، ... (CHANNEL_FOOTER)
 function platformMeta_(key) { return POST_LINK_PLATFORMS.find(function(p) { return p.key === String(key); }) || { key: String(key), label: String(key), emoji: "🔗" }; }
 function splitArtists_(value) {
-  return String(value || "").split(/\s*(?:,|،|\/|&|\+|\band\b|\bfeat\.?\b|\bft\.?\b|\bwith\b)\s*/i).map(function(x) { return String(x || "").trim(); }).filter(Boolean);
+  return String(value || "").split(/\s*(?:,|،|\/|&|\+|\band\b|\bfeat\.?\b|\bft\.?\b|\bwith\b)\s*/i).map(function(x) { return sanitizeArtistName_(x); }).filter(Boolean);
 }
-function joinArtistsAmp_(value) { const list = splitArtists_(value); return list.length ? list.join(" & ") : String(value || "").trim(); }
+function joinArtistsAmp_(value) { const list = splitArtists_(value); return list.length ? list.join(" & ") : sanitizeArtistName_(value); }
 // نام هنرمندان برای نمایش در پیام‌ها؛ فهرست‌ها با «،» و «&» جدا می‌شوند.
 function formatArtistNames_(value) {
   const list = splitArtists_(value);
-  if (!list.length) return String(value || "").trim();
+  if (!list.length) return sanitizeArtistName_(value);
   return list.join(" ، ");
 }
 function cleanHashtag_(text) { return String(text || "").replace(/[^A-Za-z0-9_\u0600-\u06FF\u200c]/g, "").slice(0, 32); }
@@ -5298,16 +5786,14 @@ function downloadButtonMarkup_(submission, trackId) {
   return { inline_keyboard: [[{ text: buttonText, url: url }]] };
 }
 function postActionsMarkup_(submission) {
-  // مارک‌آپ پست کاور: به‌صورت پیش‌فرض خالی است تا کامنت‌های پست باز و تمیز بمانند؛
-  // دکمهٔ دانلود زیر پست صوتی می‌آید. با POST_DOWNLOAD_BUTTON_ON_COVER=«true» دکمه اینجا هم می‌آید.
+  // مارک‌آپ پست کاور: به‌صورت پیش‌فرض خالی است تا کامنت‌های خودِ تلگرام زیر پست اول باز و تمیز بمانند؛
+  // دکمهٔ دانلود و دکمهٔ کانال هنرمند زیر پست صوتی می‌آیند. با POST_DOWNLOAD_BUTTON_ON_COVER=«true» دکمه اینجا هم می‌آید.
   const sub = submission || {};
   const rows = [];
   if (String(getSetting_("POST_DOWNLOAD_BUTTON_ON_COVER")) === "true") {
     const dl = downloadButtonMarkup_(sub, "");
     if (dl) dl.inline_keyboard.forEach(function(r) { rows.push(r); });
   }
-  const ccRow = ownerChannelButtonRow_(sub);
-  if (ccRow) rows.push(ccRow);
   if (String(getSetting_("POST_SHOW_LINK_BUTTONS")) === "true") {
     const visible = (sub.links || []).filter(function(l) { return l && l.url && (sub.platformVisible || {})[l.platform] !== false; });
     const buttons = visible.slice(0, 6).map(function(l) { const p = platformMeta_(l.platform); return { text: p.emoji + " " + p.label, url: l.url }; });
@@ -5557,14 +6043,29 @@ function publishQueueJob() {
   } catch (e) { logError_("publishQueueJob", e); }
   finally { try { lock.releaseLock(); } catch (e2) {} }
 }
-function ensureWorkersReady_() {
-  const triggers = ScriptApp.getProjectTriggers().map(function(t) { return t.getHandlerFunction(); });
-  if (triggers.indexOf("publishQueueJob") < 0) {
-    if (String(getSetting_("QUEUE_ENABLED") || "true") === "true") ScriptApp.newTrigger("publishQueueJob").timeBased().everyMinutes(1).create();
+function ensureWorkersReady_(force) {
+  try {
+    const cache = CacheService.getScriptCache();
+    if (!force && cache.get("workers_ready_ok")) return;
+    const raw = safeGetProjectTriggers_();
+    if (!raw) return;
+    const triggers = raw.map(function(t) { try { return t.getHandlerFunction(); } catch (e) { return ""; } });
+    if (triggers.indexOf("publishQueueJob") < 0) {
+      if (String(getSetting_("QUEUE_ENABLED") || "true") === "true") {
+        try { ScriptApp.newTrigger("publishQueueJob").timeBased().everyMinutes(1).create(); } catch (e) {}
+      }
+    }
+    if (triggers.indexOf("broadcastQueueJob") < 0) {
+      try { ScriptApp.newTrigger("broadcastQueueJob").timeBased().everyMinutes(5).create(); } catch (e) {}
+    }
+    if (triggers.indexOf("cleanupJob") < 0) {
+      try { ScriptApp.newTrigger("cleanupJob").timeBased().everyHours(6).create(); } catch (e) {}
+    }
+    if (String(getSetting_("BACKUP_ENABLED") || "false") === "true") ensureWeeklyBackupTrigger_();
+    cache.put("workers_ready_ok", "1", 21600);
+  } catch (e) {
+    console.warn("[FloraBot] ensureWorkersReady_: " + (e && e.message || e));
   }
-  if (triggers.indexOf("broadcastQueueJob") < 0) ScriptApp.newTrigger("broadcastQueueJob").timeBased().everyMinutes(5).create();
-  if (triggers.indexOf("cleanupJob") < 0) ScriptApp.newTrigger("cleanupJob").timeBased().everyHours(6).create();
-  if (String(getSetting_("BACKUP_ENABLED") || "false") === "true") ensureWeeklyBackupTrigger_();
 }
 // اگر STAGING_CHANNEL_ID تنظیم شده باشد، انتشار آزمایشی اول به آنجا می‌رود تا ادمین پیش‌نمایش واقعی ببیند.
 function resolvePublishChannel_(forPreview) {
@@ -6691,12 +7192,18 @@ function ccBroadcastRows_(target) {
   }
   return rows;
 }
-function broadcastSendToChannel_(items, row) {
+function broadcastSendToChannel_(items, row, broadcast) {
+  const batchId = String((broadcast && broadcast.broadcastId) || newId_("BCC"));
+  const createdBy = String((broadcast && broadcast.createdBy) || "");
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     let r;
-    if (item.kind === "text" && item.caption) r = sendMessage_(row.chatId, item.caption);
-    else r = copyMessage_(row.chatId, item.sourceChatId, item.sourceMessageId);
+    if (item.sourceChatId && item.sourceMessageId) {
+      r = copyMessage_(row.chatId, item.sourceChatId, item.sourceMessageId);
+      if ((!r || !r.ok) && item.kind === "text" && item.caption) r = sendMessage_(row.chatId, item.caption);
+    } else {
+      r = sendMessage_(row.chatId, item.caption);
+    }
     if (!r || !r.ok) {
       const desc = String(r && r.description || "");
       if (/kicked|not enough rights|chat not found|forbidden|have the right|admin/i.test(desc)) {
@@ -6705,6 +7212,19 @@ function broadcastSendToChannel_(items, row) {
       }
       if (/too many requests|retry after/i.test(desc)) return { status: "ratelimit", error: truncate_(desc, 120) };
       return { status: "failed", error: truncate_(desc, 120) };
+    }
+    if (r.result && r.result.message_id) {
+      recordCcPost_({
+        batchId: batchId,
+        sourceType: "message",
+        channelId: row.id,
+        chatId: row.chatId,
+        messageId: Number(r.result.message_id),
+        kind: item.kind || "text",
+        caption: item.caption || "",
+        fileId: "",
+        createdBy: createdBy
+      });
     }
   }
   try { setConnectedChannelField_(row.id, "lastOkAt", new Date()); } catch (e) {}
@@ -6737,7 +7257,7 @@ function processBroadcast_(broadcast) {
     const fresh = getBroadcast_(broadcast.broadcastId);
     if (fresh && fresh.status === "paused") return;
     const u = recipients[i];
-    const outcome = isCC ? broadcastSendToChannel_(items, u.cc) : broadcastSendToUser_(items, u.userId);
+    const outcome = isCC ? broadcastSendToChannel_(items, u.cc, broadcast) : broadcastSendToUser_(items, u.userId);
     rows.push([broadcast.broadcastId, u.userId, outcome.status, new Date(), outcome.error]);
     if (outcome.status === "sent" || outcome.status === "blocked") sentThisRun++;
     if (outcome.status === "ratelimit") break;
@@ -6846,7 +7366,8 @@ function showStatsPanel_(chatId, uid) {
   const byStatus = {}; subs.forEach(function(s) { byStatus[s.status] = (byStatus[s.status] || 0) + 1; });
   const lib = getMusicLibrary_();
   const downloads = lib.reduce(function(sum, t) { return sum + (Number(t.downloadCount) || 0); }, 0);
-  const triggers = ScriptApp.getProjectTriggers().length;
+  const rawTriggers = safeGetProjectTriggers_();
+  const triggers = rawTriggers ? rawTriggers.length : "—";
   const lines = ["📊 آمار", "👥 کاربران: " + users.length + " (فعال " + users.filter(function(u) { return u.active && !u.blocked; }).length + (users.filter(function(u) { return u.botBlocked; }).length ? " · بلاک‌کرده " + users.filter(function(u) { return u.botBlocked; }).length : "") + ")",
     "🎵 ارسال‌ها: " + subs.length, "⏳ در انتظار: " + (byStatus.pending || 0), "🗓 صف: " + ((byStatus.approved || 0) + (byStatus.publishing || 0)),
     "✅ منتشرشده: " + (byStatus.published || 0), "⚠️ خطا: " + (byStatus.failed || 0), "🎧 ترک‌های کتابخانه: " + lib.length,
@@ -6858,7 +7379,8 @@ function showStatsPanel_(chatId, uid) {
 }
 function showMaintenancePanel_(chatId, uid) {
   if (!adminGate_(chatId, uid, "settings")) return;
-  const triggers = ScriptApp.getProjectTriggers().map(function(t) { return t.getHandlerFunction(); });
+  const rawTriggers = safeGetProjectTriggers_() || [];
+  const triggers = rawTriggers.map(function(t) { try { return t.getHandlerFunction(); } catch (e) { return ""; } }).filter(Boolean);
   const counts = {};
   triggers.forEach(function(x) { counts[x] = (counts[x] || 0) + 1; });
   const lines = ["🧹 نگهداری و بکاپ",
@@ -6901,8 +7423,8 @@ function showSettingsPanel_(chatId, uid, page, query) {
   sendMessage_(chatId, "⚙️ تنظیمات (" + all.length + ") — صفحهٔ " + (p + 1) + "/" + pages + (q ? " — جست‌وجو: " + q : ""), { inline_keyboard: rows });
 }
 function showSettingEditor_(chatId, uid, rowIndex) {
-  if (!adminGate_(chatId, uid, "settings")) return;
   const setting = getAllSettings_().find(function(s) { return s.row === Number(rowIndex); });
+  if (!adminGate_(chatId, uid, adminPermissionForSettingKey_(setting ? setting.key : ""))) return;
   if (!setting) { sendMessage_(chatId, "تنظیم پیدا نشد.", { inline_keyboard: [[{ text: "🔁 بازخوانی", callback_data: "a:settings" }]] }); return; }
   const meta = SETTINGS_CHOICE_OPTIONS_[setting.key];
   const rows = [];
@@ -6930,7 +7452,18 @@ function showChannelPanel_(chatId, uid) {
     [{ text: "🧪 تست کاور", callback_data: "a:covertest" }, { text: "🏠 منو", callback_data: "a:home" }]
   ] });
 }
-function rowOfSetting_(key) { const s = getAllSettings_().find(function(x) { return x.key === String(key); }); return s ? s.row : 0; }
+function rowOfSetting_(key) {
+  const k = String(key || "").trim();
+  if (!k) return 0;
+  let s = getAllSettings_().find(function(x) { return x.key === k; });
+  if (!s) {
+    try {
+      setSetting_(k, getSetting_(k));
+      s = getAllSettings_().find(function(x) { return x.key === k; });
+    } catch (e) {}
+  }
+  return s ? s.row : 0;
+}
 function showColorsPanel_(chatId, uid) {
   if (!adminGate_(chatId, uid, "settings")) return;
   const styles = ["default", "primary", "success", "danger"];
@@ -6969,6 +7502,7 @@ function handleAdminCallback_(cb) {
   if (permission && permission !== "admins" && !hasAdminPermission_(uid, permission)) { answerCallbackQuery_(cb.id, "دسترسی نداری."); return; }
   if (parts[0] === "acc") { handleConnectedChannelsAdminCallback_(cb); return; }
   if (parts[0] === "bn") { handleCcBannerCallback_(cb); return; }
+  if (parts[0] === "ccp") { handleCcPostsCallback_(cb); return; }
   const p0 = parts[0];
   try {
     if (data === "a:home") { clearSession_("M:" + uid); answerCallbackQuery_(cb.id); showAdminMenu_(chatId); return; }
@@ -6996,7 +7530,8 @@ function handleAdminCallback_(cb) {
       const next = getSetting_("QUEUE_ENABLED") === "true" ? "false" : "true";
       setSetting_("QUEUE_ENABLED", next);
       answerCallbackQuery_(cb.id, next === "true" ? "صف روشن شد" : "صف خاموش شد");
-      if (next === "true") ensureWorkersReady_();
+      if (next === "true") ensureWorkersReady_(true);
+      else { try { CacheService.getScriptCache().remove("workers_ready_ok"); } catch (e) {} }
       showMaintenancePanel_(chatId, uid); return;
     }
     if (data === "a:covertest") {
@@ -7040,7 +7575,7 @@ function handleAdminCallback_(cb) {
       };
       if (simple[rest]) { simple[rest](); return; }
       if (rest.indexOf("settings") === 0) { answerCallbackQuery_(cb.id); showSettingsPanel_(chatId, uid, Number(parts[2]) || 0, ""); return; }
-      if (/^(sub|comingsoon|downloadtoggle)/.test(rest)) { handleSubmissionCallback_(cb, parts); return; }
+      if (/^(sub|comingsoon|freestyle|downloadtoggle|delapprove|delreject)/.test(rest)) { handleSubmissionCallback_(cb, parts); return; }
       if (/^(users|list|user|usersearch)/.test(rest)) { handleUsersCallback_(cb, parts); return; }
       if (/^(admins|adminadd|admindel|adminrole)/.test(rest)) { handleAdminsCallback_(cb, parts); return; }
       if (/^resets?/.test(rest)) { handleResetCallback_(cb, parts); return; }
@@ -7775,6 +8310,50 @@ function handleAdminState_(message, session) {
   // ویرایش دستی اثر توسط مدیر (ADM_EDIT_TITLE / …_COVER / …_AUDIO / …)
   if (state.indexOf("ADM_EDIT_") === 0) { handleAdminEditState_(message, session); return; }
 
+  // ارسال تکی فوری پیام به یک کانال خاص
+  if (state === "ADM_CC_SEND_ONE") {
+    const ch = getConnectedChannelById_(data.channelId || "");
+    clearSession_("M:" + uid);
+    if (!ch || ch.status !== "active") {
+      sendMessage_(chatId, "⚠️ این کانال دیگر فعال نیست.", adminKeyboard_());
+      showAdminConnectedChannels_(chatId, uid, 0);
+      return;
+    }
+    const kind = message.photo ? "photo" : message.audio ? "audio" : message.video ? "video" : message.voice ? "voice" : message.document ? "document" : (message.text ? "text" : "");
+    if (!kind) {
+      setSession_("M:" + uid, "ADM_CC_SEND_ONE", { channelId: ch.id });
+      sendMessage_(chatId, "قالب را نفهمیدم — متن، عکس، صوت، ویدیو یا فایل بفرست.", cancelKeyboard_());
+      return;
+    }
+    const item = {
+      kind: kind,
+      caption: kind === "text" ? String(message.text || "") : String(message.caption || ""),
+      sourceChatId: String(message.chat.id),
+      sourceMessageId: String(message.message_id)
+    };
+    const batchId = newId_("BCC");
+    const out = broadcastSendToChannel_([item], ch, { broadcastId: batchId, createdBy: uid });
+    logAdminAction_(uid, "cc_send_one", ch.id, out.status);
+    if (out.status === "sent") {
+      const sentPost = getActiveCcPosts_().find(function(p) { return p.batchId === batchId && p.channelId === String(ch.id); });
+      const shortTitle = truncate_(ch.title || ch.chatId, 18);
+      const kb = [];
+      if (sentPost) {
+        kb.push([
+          { text: "✏️ ویرایش همین پیام در «" + shortTitle + "»", callback_data: "ccp:editone:" + sentPost.postId },
+          { text: "🗑 حذف همین پیام از «" + shortTitle + "»", callback_data: "ccp:delone:" + sentPost.postId }
+        ]);
+      }
+      kb.push([{ text: "📺 پیام‌های «" + shortTitle + "»", callback_data: "ccp:ch:" + ch.id + ":0" }, { text: "📢 کانال‌های وصل‌شده", callback_data: "acc:list:0" }]);
+      sendMessage_(chatId, "✅ پیام با موفقیت به کانال «" + (ch.title || ch.chatId) + "» ارسال شد.", adminKeyboard_());
+      sendMessage_(chatId, "مدیریت پیام ارسال‌شده در «" + (ch.title || ch.chatId) + "»:", { inline_keyboard: kb });
+    } else {
+      sendMessage_(chatId, "⛔ ارسال به کانال «" + (ch.title || ch.chatId) + "» ناموفق بود: " + (out.error || out.status), adminKeyboard_());
+      showAdminConnectedChannels_(chatId, uid, 0);
+    }
+    return;
+  }
+
   // پیام مدیر به کانال‌های وصل‌شده: هر قالبی (متن/عکس/صوت/ویدیو/فایل) → تأییدیهٔ «فوری/صف»
   if (state === "ADM_CC_MSG") {
     const target = String(data.target || "cc_all");
@@ -7786,17 +8365,78 @@ function handleAdminState_(message, session) {
     sendMessage_(chatId, "📨 پیام آماده شد — مخاطب: " + n + " کانال وصل‌شده.\nچطور فرستاده شود؟", { inline_keyboard: [[{ text: "🚀 ارسال فوری (همین حالا)", callback_data: "acc:now" }, { text: "⏳ بگذار در صف", callback_data: "acc:queue" }], [{ text: "❌ انصراف", callback_data: "acc:cancelcb" }]] });
     return;
   }
-  // بنر تبلیغاتی: پیام مدیر ثبت می‌شود و به همهٔ کانال‌های وصل‌شده می‌رود
+  // بنر تبلیغاتی: پیام مدیر ثبت می‌شود و مدیر انتخاب می‌کند به همه، انتخابی یا فقط ذخیره شود
   if (state === "ADM_CC_BANNER") {
     const kind = message.photo ? "photo" : message.audio ? "audio" : message.video ? "video" : message.voice ? "voice" : message.document ? "document" : (message.text ? "text" : "");
     if (!kind) { sendMessage_(chatId, "قالب را نفهمیدم — بنر را به‌صورت متن، عکس، صوت، ویدیو یا فایل بفرست.", cancelKeyboard_()); return; }
     const item = { kind: kind, caption: kind === "text" ? String(message.text || "") : String(message.caption || ""), sourceChatId: String(message.chat.id), sourceMessageId: String(message.message_id) };
     setCcBanner_(item, uid);
     logAdminAction_(uid, "cc_banner_set", kind, item.caption.slice(0, 80));
-    const rep = sendCcBannerToAll_(getActiveConnectedChannels_());
     clearSession_("M:" + uid);
-    sendMessage_(chatId, "🖼 بنر ثبت شد و به کانال‌های وصل‌شده فرستاده شد.\n✅ " + rep.sent + " کانال · ⛔ " + rep.failed + " خطا" + (rep.kicked ? " (غیرفعال شد: " + rep.kicked + ")" : ""), adminKeyboard_());
-    showCcBannerPanel_(chatId, uid);
+    const activeCount = getActiveConnectedChannels_().length;
+    sendMessage_(chatId, "🖼 بنر جدید ذخیره شد.", adminKeyboard_());
+    sendMessage_(chatId, "📤 این بنر اکنون کجا ارسال شود؟", {
+      inline_keyboard: [
+        [{ text: "📨 ارسال به همهٔ کانال‌ها (" + activeCount + ")", callback_data: "bn:sendall" }],
+        [{ text: "🎯 انتخاب کانال (ارسال به ۱ یا چند کانال)", callback_data: "bn:pick:0" }],
+        [{ text: "✅ فقط ذخیره بماند (بدون ارسال الان)", callback_data: "bn:panel" }]
+      ]
+    });
+    return;
+  }
+
+  // ویرایش پیام‌های ارسال‌شده در کانال‌های وصل‌شده (تکی یا دسته‌ای)
+  if (state === "ADM_CC_POST_EDIT") {
+    const kind = message.photo ? "photo" : message.audio ? "audio" : message.video ? "video" : message.voice ? "voice" : message.document ? "document" : (message.text ? "text" : "");
+    if (!kind) { sendMessage_(chatId, "قالب را نفهمیدم — متن، عکس، صوت، ویدیو یا فایل جدید را برای جایگزینی/ویرایش بفرست.", cancelKeyboard_()); return; }
+    const mode = String(data.mode || "post");
+    if (mode === "post") {
+      const post = getCcPostById_(data.postId);
+      clearSession_("M:" + uid);
+      if (!post || post.status !== "active") {
+        sendMessage_(chatId, "⚠️ این پیام دیگر فعال نیست یا قبلاً حذف شده است.", adminKeyboard_());
+        showCcSinglePostPicker_(chatId, uid, 0, "all");
+        return;
+      }
+      const ch = getConnectedChannelById_(post.channelId);
+      const chTitle = (ch && ch.title) || post.chatId;
+      const res = editCcPostRecord_(post, message);
+      logAdminAction_(uid, "cc_post_edit_one", post.postId, res.ok ? "ok" : res.desc);
+      sendMessage_(chatId, res.ok ? ("✅ پیام در کانال «" + chTitle + "» با موفقیت ویرایش شد.") : ("⚠️ ویرایش ناموفق بود: " + res.desc), adminKeyboard_());
+      showCcChannelPosts_(chatId, uid, post.channelId, 0);
+      return;
+    }
+    const targetType = String(data.sourceType || "");
+    const batchId = String(data.batchId || "");
+    const posts = getActiveCcPosts_().filter(function(p) {
+      if (p.sourceType === "cover_notify") return false;
+      if (mode === "type" && targetType) return p.sourceType === targetType;
+      return p.batchId === batchId;
+    });
+    clearSession_("M:" + uid);
+    if (!posts.length) {
+      sendMessage_(chatId, "⚠️ هیچ پیام فعالی برای این بخش پیدا نشد.", adminKeyboard_());
+      showCcPostsList_(chatId, uid, 0, "all");
+      return;
+    }
+    let okCount = 0; let failCount = 0;
+    posts.forEach(function(p) {
+      const r = editCcPostRecord_(p, message);
+      if (r.ok) okCount++; else failCount++;
+    });
+    // اگر این دسته مربوط به بنر تبلیغاتی بود، نسخهٔ ذخیره‌شدهٔ بنر را هم به‌روزرسانی کن
+    if (posts[0].sourceType === "banner" || targetType === "banner") {
+      setCcBanner_({
+        kind: kind,
+        caption: kind === "text" ? String(message.text || "") : String(message.caption || ""),
+        sourceChatId: String(message.chat.id),
+        sourceMessageId: String(message.message_id)
+      }, uid);
+    }
+    logAdminAction_(uid, "cc_post_edit_batch", batchId || targetType, "ok=" + okCount + ",fail=" + failCount);
+    sendMessage_(chatId, "✏️ ویرایش در همه انجام شد.\n✅ ویرایش موفق: " + okCount + " کانال · ⛔ ناموفق: " + failCount, adminKeyboard_());
+    if (targetType === "banner") showCcBannerPanel_(chatId, uid);
+    else showCcPostsList_(chatId, uid, 0, "all");
     return;
   }
 
@@ -7959,7 +8599,7 @@ function cleanupJob() {
     pruneTrigger_("broadcastQueueJob", 1);
     pruneTrigger_("cleanupJob", 1);
     pruneTrigger_("weeklyBackupJob", 1);
-    out.triggers = ScriptApp.getProjectTriggers().length;
+    out.triggers = (safeGetProjectTriggers_() || []).length;
     // ۴) ردیف‌های دانلود قدیمی (بیش از ۶۰ روز)
     const dsh = getSheet_(APP.SHEETS.MUSIC_DOWNLOADS);
     if (dsh.getLastRow() >= 2) {
@@ -8576,47 +9216,122 @@ function afterAdminEdit_(chatId, uid, sub, field, label, mediaChanged) {
 }
 
 // ───────────────────────── کانال‌های وصل‌شده (سمت مدیر) ─────────────────────────
-function showAdminConnectedChannels_(chatId, uid, page) {
-  const session = getSession_("M:" + uid); const sdata = (session && session.data) || {};
+function sendOrEditAdminPanel_(chatId, editMsgId, text, replyMarkup) {
+  if (editMsgId) {
+    const payload = { chat_id: String(chatId), message_id: Number(editMsgId), text: String(text || ""), disable_web_page_preview: true };
+    if (replyMarkup) payload.reply_markup = stylizeMarkup_(replyMarkup);
+    const r = telegramRequest_("editMessageText", payload);
+    if (r && r.ok) return r;
+    if (r && !r.ok && payload.reply_markup && /markup|style|keyboard|button/i.test(String(r.description || ""))) {
+      payload.reply_markup = stripMarkupStyles_(replyMarkup);
+      const r2 = telegramRequest_("editMessageText", payload);
+      if (r2 && r2.ok) return r2;
+    }
+    if (r && /message is not modified/i.test(String(r.description || ""))) return r;
+  }
+  return sendMessage_(chatId, text, replyMarkup);
+}
+function showAdminConnectedChannels_(chatId, uid, page, editMsgId) {
+  const session = getSession_("M:" + uid); const sdata = (session && session.state === "ADM_CC_LIST" && session.data) || {};
   const sel = Array.isArray(sdata.sel) ? sdata.sel.slice() : [];
   const all = getConnectedChannels_().slice().sort(function(a, b) { return dateMillis_(b.connectedAt) - dateMillis_(a.connectedAt); });
   const active = all.filter(function(c) { return c.status === "active"; });
   if (!all.length) {
-    sendMessage_(chatId, "📢 کانال‌های وصل‌شده\nهنوز هیچ کاربری بات را در کانالش ادمین نکرده است.", { inline_keyboard: [[{ text: "🏠 منو", callback_data: "a:home" }]] });
+    sendOrEditAdminPanel_(chatId, editMsgId, "📢 کانال‌های وصل‌شده\nهنوز هیچ کاربری بات را در کانالش ادمین نکرده است.", { inline_keyboard: [[{ text: "🏠 منو", callback_data: "a:home" }]] });
     return;
   }
   const per = 4; const pages = Math.max(1, Math.ceil(all.length / per));
   const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
-  const lines = ["📢 کانال‌های وصل‌شده", "✅ فعال: " + active.length + " · کل: " + all.length + " · صفحه " + (p + 1) + "/" + pages, ""];
+  const lines = [
+    "📢 کانال‌های وصل‌شده",
+    "✅ فعال: " + active.length + " · کل: " + all.length + " · صفحه " + (p + 1) + "/" + pages,
+    "برای **ارسال تکی**، **ویرایش تکی** یا **حذف تکی** روی دکمهٔ مربوط به همان کانال بزن:",
+    ""
+  ];
   const kb = [];
   all.slice(p * per, p * per + per).forEach(function(c) {
     const u = getUserById_(c.userId);
-    lines.push((c.status === "active" ? "✅ " : "⛔ ") + (c.title || c.chatId) + (c.username ? " — @" + String(c.username).replace(/^@/, "") : "") + "\n   👤 " + ((u && u.rapName) || c.userId) + " · 👥 " + (c.members || 0) + (c.lastError ? " · ⚠️ " + truncate_(c.lastError, 40) : ""));
-    kb.push([{ text: (sel.indexOf(c.id) >= 0 ? "☑️ " : "⬜️ ") + truncate_(c.title || c.chatId, 28), callback_data: "acc:sel:" + c.id + ":" + p }]);
+    const shortTitle = truncate_(c.title || c.chatId, 16);
+    const chPosts = getActiveCcPosts_().filter(function(x) { return x.sourceType !== "cover_notify" && (x.channelId === c.id || x.chatId === String(c.chatId)); }).length;
+    lines.push((c.status === "active" ? "✅ " : "⛔ ") + (c.title || c.chatId) + (c.username ? " — @" + String(c.username).replace(/^@/, "") : "") + "\n   👤 " + ((u && u.rapName) || c.userId) + " · 👥 " + (c.members || 0) + (chPosts ? " · 📨 " + chPosts + " پیام فعال" : "") + (c.lastError ? " · ⚠️ " + truncate_(c.lastError, 40) : ""));
+    kb.push([
+      { text: "📤 ارسال تکی به «" + shortTitle + "»", callback_data: "acc:sendone:" + c.id },
+      { text: "🖼 بنر تکی به «" + shortTitle + "»", callback_data: "bn:sendone:" + c.id + ":" + p }
+    ]);
+    kb.push([
+      { text: "✏️ ویرایش / 🗑 حذف تکی در «" + shortTitle + "» (" + chPosts + ")", callback_data: "ccp:ch:" + c.id + ":0" },
+      { text: (sel.indexOf(c.id) >= 0 ? "☑️ " : "⬜️ ") + "انتخاب", callback_data: "acc:sel:" + c.id + ":" + p }
+    ]);
   });
   const nav = [];
   if (p > 0) nav.push({ text: "⬅️ قبلی", callback_data: "acc:list:" + (p - 1) });
   if (p < pages - 1) nav.push({ text: "➡️ بعدی", callback_data: "acc:list:" + (p + 1) });
   if (nav.length) kb.push(nav);
-  kb.push([{ text: "📨 ارسال به همه (" + active.length + ")", callback_data: "acc:sendall" }, { text: "📨 انتخاب‌شده‌ها (" + sel.length + ")", callback_data: "acc:sendsel" }]);
+  kb.push([
+    { text: "🎯 ارسال تکی پیام (انتخاب کانال)", callback_data: "acc:pickone:0" },
+    { text: "📨 ارسال به همه (" + active.length + ")", callback_data: "acc:sendall" }
+  ]);
+  if (sel.length) {
+    kb.push([{ text: "📨 ارسال پیام به انتخاب‌شده‌ها (" + sel.length + ")", callback_data: "acc:sendsel" }]);
+  }
+  kb.push([
+    { text: "🎯 ویرایش / حذف تکی پیام‌ها", callback_data: "ccp:single:0:all" },
+    { text: "📋 ویرایش / حذف در همه", callback_data: "ccp:list:0:all" }
+  ]);
   kb.push([{ text: "🔄 بررسی وضعیت", callback_data: "acc:refresh:" + p }, { text: "🏠 منو", callback_data: "a:home" }]);
   setSession_("M:" + uid, "ADM_CC_LIST", { sel: sel, page: p });
-  sendMessage_(chatId, lines.join("\n"), { inline_keyboard: kb });
+  sendOrEditAdminPanel_(chatId, editMsgId, lines.join("\n"), { inline_keyboard: kb });
+}
+function showAdminSingleSendPicker_(chatId, uid, page, editMsgId) {
+  const active = getActiveConnectedChannels_().slice().sort(function(a, b) { return dateMillis_(b.connectedAt) - dateMillis_(a.connectedAt); });
+  if (!active.length) {
+    sendOrEditAdminPanel_(chatId, editMsgId, "⚠️ هیچ کانال وصل‌شدهٔ فعالی وجود ندارد.", { inline_keyboard: [[{ text: "⬅️ بازگشت", callback_data: "acc:list:0" }]] });
+    return;
+  }
+  const per = 6;
+  const pages = Math.max(1, Math.ceil(active.length / per));
+  const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const lines = [
+    "🎯 ارسال تکی پیام به یک کانال",
+    "روی کانالی که می‌خواهی پیام فقط به همان فرستاده شود بزن (صفحه " + (p + 1) + "/" + pages + "):"
+  ];
+  const kb = [];
+  active.slice(p * per, p * per + per).forEach(function(c) {
+    const title = truncate_(c.title || c.chatId, 24);
+    kb.push([{ text: "📤 ارسال پیام فقط به «" + title + "»", callback_data: "acc:sendone:" + c.id }]);
+  });
+  const nav = [];
+  if (p > 0) nav.push({ text: "⬅️ قبلی", callback_data: "acc:pickone:" + (p - 1) });
+  if (p < pages - 1) nav.push({ text: "➡️ بعدی", callback_data: "acc:pickone:" + (p + 1) });
+  if (nav.length) kb.push(nav);
+  kb.push([{ text: "⬅️ بازگشت به کانال‌ها", callback_data: "acc:list:0" }, { text: "🏠 منو", callback_data: "a:home" }]);
+  sendOrEditAdminPanel_(chatId, editMsgId, lines.join("\n"), { inline_keyboard: kb });
 }
 function handleConnectedChannelsAdminCallback_(cb) {
   const uid = String(cb.from.id); const chatId = String(cb.message.chat.id);
+  const msgId = cb.message && cb.message.message_id ? Number(cb.message.message_id) : 0;
   const parts = String(cb.data || "").split(":");
   const action = parts[1] || "list";
-  const session = getSession_("M:" + uid); const sdata = (session && session.data) || {};
+  const session = getSession_("M:" + uid); const sdata = (session && session.state === "ADM_CC_LIST" && session.data) || {};
   const sel = Array.isArray(sdata.sel) ? sdata.sel.slice() : [];
   const page = Number(parts[3] != null && parts[3] !== "" ? parts[3] : (sdata.page || 0)) || 0;
-  if (action === "list") { answerCallbackQuery_(cb.id); showAdminConnectedChannels_(chatId, uid, Number(parts[2]) || 0); return; }
+  if (action === "list") { answerCallbackQuery_(cb.id); showAdminConnectedChannels_(chatId, uid, Number(parts[2]) || 0, msgId); return; }
+  if (action === "pickone") { answerCallbackQuery_(cb.id); showAdminSingleSendPicker_(chatId, uid, Number(parts[2]) || 0, msgId); return; }
+  if (action === "sendone") {
+    const chId = parts[2] || "";
+    const ch = getConnectedChannelById_(chId);
+    if (!ch || ch.status !== "active") { answerCallbackQuery_(cb.id, "این کانال فعال نیست."); showAdminConnectedChannels_(chatId, uid, 0, msgId); return; }
+    setSession_("M:" + uid, "ADM_CC_SEND_ONE", { channelId: ch.id });
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, "📤 پیامَت (متن، عکس، صوت، ویدیو یا فایل) را بفرست تا **فقط در کانال «" + (ch.title || ch.chatId) + "»** ارسال شود:", cancelKeyboard_());
+    return;
+  }
   if (action === "sel") {
     const id = parts[2] || ""; const i = sel.indexOf(id);
     if (i >= 0) sel.splice(i, 1); else sel.push(id);
     setSession_("M:" + uid, "ADM_CC_LIST", { sel: sel, page: page });
     answerCallbackQuery_(cb.id);
-    showAdminConnectedChannels_(chatId, uid, page);
+    showAdminConnectedChannels_(chatId, uid, page, msgId);
     return;
   }
   if (action === "refresh") {
@@ -8627,7 +9342,7 @@ function handleConnectedChannelsAdminCallback_(cb) {
       else setConnectedChannelField_(c.id, "lastOkAt", new Date());
     });
     answerCallbackQuery_(cb.id, kicked ? kicked + " کانال غیرفعال شد." : "همهٔ کانال‌ها فعال‌اند.");
-    showAdminConnectedChannels_(chatId, uid, Number(parts[2]) || 0);
+    showAdminConnectedChannels_(chatId, uid, Number(parts[2]) || 0, msgId);
     return;
   }
   if (action === "cancelcb") { clearSession_("M:" + uid); answerCallbackQuery_(cb.id); showAdminConnectedChannels_(chatId, uid, page); return; }
@@ -8654,7 +9369,7 @@ function handleConnectedChannelsAdminCallback_(cb) {
     return;
   }
   if (action === "sendall" || action === "sendsel") {
-    if (action === "sendsel" && !sel.length) { answerCallbackQuery_(cb.id, "اول با ⬜️ کانال‌ها را انتخاب کن."); return; }
+    if (action === "sendsel" && !sel.length) { answerCallbackQuery_(cb.id, "اول با ⬜️ کانال‌ها را انتخاب کن یا روی «📤 ارسال تکی» بزن."); return; }
     const target = action === "sendall" ? "cc_all" : "cc_sel:" + sel.join(",");
     setSession_("M:" + uid, "ADM_CC_MSG", { target: target, sel: sel, page: page });
     answerCallbackQuery_(cb.id);
@@ -8662,7 +9377,7 @@ function handleConnectedChannelsAdminCallback_(cb) {
     return;
   }
   answerCallbackQuery_(cb.id);
-  showAdminConnectedChannels_(chatId, uid, page);
+  showAdminConnectedChannels_(chatId, uid, page, msgId);
 }
 
 // ارسال فوری: همان اجرا دسته‌ها را پشت‌سرهم می‌فرستد (بودجهٔ ~۲۵ ثانیه)؛
@@ -8692,40 +9407,102 @@ function showCcBannerPanel_(chatId, uid) {
   clearSession_("M:" + uid);
   const items = getCcBannerItems_();
   const autoOn = String(getSetting_("CC_BANNER_ON_CONNECT") || "true") === "true";
+  const activeChannels = getActiveConnectedChannels_();
+  const activeBannerPosts = getActiveCcPosts_().filter(function(p) { return p.sourceType === "banner"; }).length;
   const lines = ["🖼 بنر تبلیغاتی کانال ما"];
   if (!items.length) lines.push("هنوز بنری ثبت نشده. هر کانالی که وصل شود، بنر در آن پست می‌شود (اگر بنری باشد).");
   else {
     const it = items[0];
     lines.push("بنر فعلی: " + (it.kind === "text" ? "متنی" : it.kind) + " · ثبت‌شده توسط " + (it.createdBy || "؟") + " · 🗓 " + formatDate_(it.createdAt));
     if (it.caption) lines.push("«" + truncate_(it.caption, 120) + "»");
-    lines.push("کانال‌های وصل‌شدهٔ فعال: " + getActiveConnectedChannels_().length);
+    lines.push("کانال‌های وصل‌شدهٔ فعال: " + activeChannels.length + (activeBannerPosts ? " · بنرهای فعال در کانال‌ها: " + activeBannerPosts : ""));
   }
   lines.push("ارسال خودکار هنگام اتصال کانال جدید: " + (autoOn ? "🟢 روشن" : "🔴 خاموش"));
-  const kb = [[{ text: "📤 ثبت بنر جدید", callback_data: "bn:new" }]];
+  const kb = [];
   if (items.length) {
-    kb.push([{ text: "👁 پیش‌نمایش بنر", callback_data: "bn:preview" }, { text: "📨 ارسال دوباره به همهٔ کانال‌ها", callback_data: "bn:sendall" }]);
-    kb.push([{ text: "🗑 حذف بنر", callback_data: "bn:del" }]);
+    kb.push([{ text: "📤 ثبت بنر جدید", callback_data: "bn:new" }, { text: "👁 پیش‌نمایش بنر", callback_data: "bn:preview" }]);
+    kb.push([{ text: "🎯 ارسال تکی بنر (انتخاب کانال)", callback_data: "bn:pick:0" }, { text: "📨 ارسال بنر به همه (" + activeChannels.length + ")", callback_data: "bn:sendall" }]);
+    kb.push([{ text: "✏️ ویرایش تکی بنر در کانال", callback_data: "ccp:single:0:banner" }, { text: "🗑 حذف تکی بنر از کانال", callback_data: "ccp:single:0:banner" }]);
+    kb.push([{ text: "✏️ ویرایش بنر در همه (" + activeBannerPosts + ")", callback_data: "ccp:editalltype:banner" }, { text: "🗑 حذف بنر از همه (" + activeBannerPosts + ")", callback_data: "ccp:delalltype:banner" }]);
+    kb.push([{ text: "🗑 حذف بنر پیش‌فرض ذخیره‌شده", callback_data: "bn:del" }]);
+  } else {
+    kb.push([{ text: "📤 ثبت بنر جدید", callback_data: "bn:new" }]);
+    if (activeBannerPosts > 0) {
+      kb.push([{ text: "✏️ ویرایش تکی بنر در کانال", callback_data: "ccp:single:0:banner" }, { text: "🗑 حذف تکی بنر از کانال", callback_data: "ccp:single:0:banner" }]);
+      kb.push([{ text: "✏️ ویرایش بنر در همه (" + activeBannerPosts + ")", callback_data: "ccp:editalltype:banner" }, { text: "🗑 حذف بنر از همه (" + activeBannerPosts + ")", callback_data: "ccp:delalltype:banner" }]);
+    }
   }
+  kb.push([{ text: "📋 همهٔ پیام‌ها و بنرهای ارسال‌شده", callback_data: "ccp:list:0:all" }]);
   kb.push([{ text: (autoOn ? "🔴 خاموش‌کردن" : "🟢 روشن‌کردن") + " ارسال خودکار در اتصال", callback_data: "bn:toggleauto" }]);
   kb.push([{ text: "🏠 منو", callback_data: "a:home" }]);
   sendMessage_(chatId, lines.join("\n"), { inline_keyboard: kb });
 }
+function showCcBannerChannelPicker_(chatId, uid, page, editMsgId) {
+  if (!adminGate_(chatId, uid, "broadcast")) return;
+  const items = getCcBannerItems_();
+  if (!items.length) {
+    sendMessage_(chatId, "⚠️ ابتدا یک بنر تبلیغاتی ثبت کن.");
+    showCcBannerPanel_(chatId, uid);
+    return;
+  }
+  const session = getSession_("M:" + uid);
+  const sdata = (session && session.state === "ADM_CC_BANNER_PICK" && session.data) || {};
+  const sel = Array.isArray(sdata.sel) ? sdata.sel.slice() : [];
+  const active = getActiveConnectedChannels_().slice().sort(function(a, b) { return dateMillis_(b.connectedAt) - dateMillis_(a.connectedAt); });
+  if (!active.length) {
+    sendMessage_(chatId, "⚠️ هیچ کانال وصل‌شدهٔ فعالی وجود ندارد.");
+    showCcBannerPanel_(chatId, uid);
+    return;
+  }
+  const per = 4;
+  const pages = Math.max(1, Math.ceil(active.length / per));
+  const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const lines = [
+    "🎯 ارسال تکی یا انتخابی بنر به کانال",
+    "• برای **ارسال تکی فوری** به یک کانال، مستقیم روی «📤 ارسال تکی به …» بزن؛",
+    "• یا چند کانال را با ⬜️ تیک بزن و «📨 ارسال به انتخاب‌شده‌ها» را بزن.",
+    "کانال‌های فعال: " + active.length + " · صفحه " + (p + 1) + "/" + pages
+  ];
+  const kb = [];
+  active.slice(p * per, p * per + per).forEach(function(c) {
+    const title = truncate_(c.title || c.chatId, 18);
+    kb.push([
+      { text: "📤 ارسال تکی به «" + title + "»", callback_data: "bn:sendone:" + c.id + ":" + p },
+      { text: (sel.indexOf(c.id) >= 0 ? "☑️ انتخاب‌شده" : "⬜️ انتخاب"), callback_data: "bn:sel:" + c.id + ":" + p }
+    ]);
+  });
+  const nav = [];
+  if (p > 0) nav.push({ text: "⬅️ قبلی", callback_data: "bn:pick:" + (p - 1) });
+  if (p < pages - 1) nav.push({ text: "➡️ بعدی", callback_data: "bn:pick:" + (p + 1) });
+  if (nav.length) kb.push(nav);
+  kb.push([
+    { text: "📨 ارسال به انتخاب‌شده‌ها (" + sel.length + ")", callback_data: "bn:sendsel" },
+    { text: "📨 ارسال به همه (" + active.length + ")", callback_data: "bn:sendall" }
+  ]);
+  kb.push([{ text: "⬅️ بازگشت به پنل بنر", callback_data: "bn:panel" }, { text: "🏠 منو", callback_data: "a:home" }]);
+  setSession_("M:" + uid, "ADM_CC_BANNER_PICK", { sel: sel, page: p });
+  sendOrEditAdminPanel_(chatId, editMsgId, lines.join("\n"), { inline_keyboard: kb });
+}
 function handleCcBannerCallback_(cb) {
   const uid = String(cb.from.id); const chatId = String(cb.message.chat.id);
+  const msgId = cb.message && cb.message.message_id ? Number(cb.message.message_id) : 0;
   if (!hasAdminPermission_(uid, "broadcast")) { answerCallbackQuery_(cb.id, "دسترسی نداری."); return; }
   const parts = String(cb.data || "").split(":");
   const action = parts[1] || "panel";
+  const session = getSession_("M:" + uid);
+  const sdata = (session && session.state === "ADM_CC_BANNER_PICK" && session.data) || {};
+  const sel = Array.isArray(sdata.sel) ? sdata.sel.slice() : [];
   if (action === "new") {
     setSession_("M:" + uid, "ADM_CC_BANNER", {});
     answerCallbackQuery_(cb.id);
-    sendMessage_(chatId, "🖼 بنر تازه را بفرست (متن، عکس، صوت، ویدیو یا فایل). به‌محض ثبت، به همهٔ کانال‌های وصل‌شده فرستاده می‌شود و از این به بعد هر کانال تازه‌ای هم آن را می‌گیرد.", cancelKeyboard_());
+    sendMessage_(chatId, "🖼 بنر تازه را بفرست (متن، عکس، صوت، ویدیو یا فایل). پس از ارسال می‌توانی انتخاب کنی به همهٔ کانال‌ها برود، به یک کانال تکی برود، یا فقط ذخیره بماند.", cancelKeyboard_());
     return;
   }
   if (action === "preview") {
     const items = getCcBannerItems_();
     if (!items.length) { answerCallbackQuery_(cb.id, "بنری ثبت نشده است."); showCcBannerPanel_(chatId, uid); return; }
     answerCallbackQuery_(cb.id);
-    sendCcBannerToChannel_({ chatId: chatId });
+    sendCcBannerToChannel_({ chatId: chatId }, { recordPost: false });
     return;
   }
   if (action === "toggleauto") {
@@ -8735,9 +9512,68 @@ function handleCcBannerCallback_(cb) {
     showCcBannerPanel_(chatId, uid);
     return;
   }
-  if (action === "sendall") {
-    const rep = sendCcBannerToAll_(getActiveConnectedChannels_());
+  if (action === "pick") {
+    answerCallbackQuery_(cb.id);
+    showCcBannerChannelPicker_(chatId, uid, Number(parts[2]) || 0, msgId);
+    return;
+  }
+  if (action === "sel") {
+    const chId = parts[2] || "";
+    const page = Number(parts[3]) || 0;
+    const idx = sel.indexOf(chId);
+    if (idx >= 0) sel.splice(idx, 1); else sel.push(chId);
+    setSession_("M:" + uid, "ADM_CC_BANNER_PICK", { sel: sel, page: page });
+    answerCallbackQuery_(cb.id);
+    showCcBannerChannelPicker_(chatId, uid, page, msgId);
+    return;
+  }
+  if (action === "sendone") {
+    const chId = parts[2] || "";
+    const page = Number(parts[3]) || 0;
+    const ch = getConnectedChannelById_(chId);
+    if (!ch || ch.status !== "active") { answerCallbackQuery_(cb.id, "کانال فعال نیست."); showCcBannerChannelPicker_(chatId, uid, page, msgId); return; }
+    if (!getCcBannerItems_().length) {
+      answerCallbackQuery_(cb.id, "ابتدا یک بنر تبلیغاتی ثبت کن.");
+      showCcBannerPanel_(chatId, uid);
+      return;
+    }
+    const r = sendCcBannerToChannel_(ch, { adminId: uid });
+    if (!r.ok && /kicked|not enough rights|chat not found|forbidden|have the right|admin/i.test(r.desc)) markConnectedChannelKicked_(ch, r.desc);
+    logAdminAction_(uid, "cc_banner_send_one", ch.id, r.ok ? "ok" : r.desc);
+    const shortTitle = truncate_(ch.title || ch.chatId, 18);
+    answerCallbackQuery_(cb.id, r.ok ? ("✅ بنر به «" + shortTitle + "» ارسال شد.") : ("⛔ خطا: " + truncate_(r.desc, 40)));
+    if (r.ok) {
+      const kb = [];
+      if (r.postIds && r.postIds.length) {
+        kb.push([
+          { text: "✏️ ویرایش همین بنر در «" + shortTitle + "»", callback_data: "ccp:editone:" + r.postIds[0] },
+          { text: "🗑 حذف همین بنر از «" + shortTitle + "»", callback_data: "ccp:delone:" + r.postIds[0] }
+        ]);
+      }
+      kb.push([{ text: "🎯 ارسال به کانال دیگر", callback_data: "bn:pick:" + page }, { text: "🖼 پنل بنر", callback_data: "bn:panel" }]);
+      sendMessage_(chatId, "✅ بنر تبلیغاتی فقط به کانال «" + (ch.title || ch.chatId) + "» ارسال شد.", { inline_keyboard: kb });
+    } else {
+      sendMessage_(chatId, "⛔ ارسال بنر به کانال «" + (ch.title || ch.chatId) + "» ناموفق بود: " + r.desc);
+    }
+    return;
+  }
+  if (action === "sendsel") {
+    if (!sel.length) { answerCallbackQuery_(cb.id, "اول حداقل یک کانال را با ⬜️ انتخاب کن."); return; }
+    const rows = getActiveConnectedChannels_().filter(function(c) { return sel.indexOf(c.id) >= 0; });
+    const rep = sendCcBannerToAll_(rows, uid);
+    clearSession_("M:" + uid);
+    logAdminAction_(uid, "cc_banner_send_sel", sel.join(","), "sent=" + rep.sent + ",failed=" + rep.failed);
     answerCallbackQuery_(cb.id, "✅ " + rep.sent + " · ⛔ " + rep.failed);
+    sendMessage_(chatId, "🎯 بنر به کانال‌های انتخابی ارسال شد.\n✅ موفق: " + rep.sent + " · ⛔ ناموفق: " + rep.failed);
+    showCcBannerPanel_(chatId, uid);
+    return;
+  }
+  if (action === "sendall") {
+    const rep = sendCcBannerToAll_(getActiveConnectedChannels_(), uid);
+    clearSession_("M:" + uid);
+    logAdminAction_(uid, "cc_banner_send_all", "", "sent=" + rep.sent + ",failed=" + rep.failed);
+    answerCallbackQuery_(cb.id, "✅ " + rep.sent + " · ⛔ " + rep.failed);
+    sendMessage_(chatId, "📨 بنر به همهٔ کانال‌های فعال ارسال شد.\n✅ موفق: " + rep.sent + " · ⛔ ناموفق: " + rep.failed);
     showCcBannerPanel_(chatId, uid);
     return;
   }
@@ -8748,6 +9584,359 @@ function handleCcBannerCallback_(cb) {
     showCcBannerPanel_(chatId, uid);
     return;
   }
+  clearSession_("M:" + uid);
   answerCallbackQuery_(cb.id);
   showCcBannerPanel_(chatId, uid);
+}
+
+// ── پنل مدیریت (ویرایش و حذف) پیام‌ها و بنرهای ارسال‌شده در کانال‌های وصل‌شده ──
+function ccPostTypeLabel_(t) {
+  if (t === "banner") return "🖼 بنر";
+  if (t === "promo") return "🎵 تبلیغ اثر";
+  return "📨 پیام";
+}
+function showCcPostsList_(chatId, uid, page, filterType) {
+  if (!adminGate_(chatId, uid, "broadcast")) return;
+  clearSession_("M:" + uid);
+  const filter = String(filterType || "all");
+  const allActive = getActiveCcPosts_().filter(function(p) {
+    if (p.sourceType === "cover_notify") return false;
+    if (filter === "banner") return p.sourceType === "banner";
+    if (filter === "message") return p.sourceType !== "banner";
+    return true;
+  });
+  // گروه‌بندی بر اساس batchId
+  const batchMap = {};
+  const batches = [];
+  allActive.forEach(function(p) {
+    const bId = p.batchId || p.postId;
+    if (!batchMap[bId]) {
+      batchMap[bId] = { batchId: bId, sourceType: p.sourceType, kind: p.kind, caption: p.caption, createdAt: p.createdAt, posts: [] };
+      batches.push(batchMap[bId]);
+    }
+    batchMap[bId].posts.push(p);
+  });
+  batches.sort(function(a, b) { return dateMillis_(b.createdAt) - dateMillis_(a.createdAt); });
+  const filterRow = [
+    { text: (filter === "all" ? "✅ " : "") + "همه", callback_data: "ccp:list:0:all" },
+    { text: (filter === "banner" ? "✅ " : "") + "🖼 بنرها", callback_data: "ccp:list:0:banner" },
+    { text: (filter === "message" ? "✅ " : "") + "📨 پیام‌ها", callback_data: "ccp:list:0:message" }
+  ];
+  if (!batches.length) {
+    sendMessage_(chatId, "📋 پیام‌های ارسال‌شده در کانال‌های وصل‌شده\n\nهیچ پیام فعالی در این بخش ثبت نشده است.", {
+      inline_keyboard: [
+        filterRow,
+        [{ text: "📢 کانال‌های وصل‌شده", callback_data: "acc:list:0" }, { text: "🖼 پنل بنر", callback_data: "bn:panel" }],
+        [{ text: "🏠 منو", callback_data: "a:home" }]
+      ]
+    });
+    return;
+  }
+  const per = 4;
+  const pages = Math.max(1, Math.ceil(batches.length / per));
+  const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const lines = [
+    "📋 پیام‌ها و بنرهای ارسال‌شده در کانال‌ها",
+    "• برای **ویرایش تکی** یا **حذف تکی** در یک کانال خاص، روی دکمه‌های تکی هر کانال بزن؛",
+    "• برای ویرایش/حذف هم‌زمان در همهٔ کانال‌ها، روی «در همه» بزن.",
+    "کل دسته‌های فعال: " + batches.length + " · صفحه " + (p + 1) + "/" + pages,
+    ""
+  ];
+  const kb = [
+    filterRow,
+    [{ text: "🎯 مشاهده و ویرایش / حذف تکی (بر اساس تک‌تک کانال‌ها)", callback_data: "ccp:single:0:" + filter }]
+  ];
+  batches.slice(p * per, p * per + per).forEach(function(b) {
+    const preview = truncate_(b.caption || (b.kind === "text" ? "متن" : b.kind), 24);
+    lines.push("• " + ccPostTypeLabel_(b.sourceType) + " (" + b.kind + ") — «" + preview + "»\n   📺 فعال در " + b.posts.length + " کانال · 🗓 " + formatDate_(b.createdAt));
+    // دکمه‌های تکی برای هر کانالِ این پیام تا مستقیم همان‌جا قابل ویرایش یا حذف تکی باشد
+    b.posts.slice(0, 3).forEach(function(post) {
+      const ch = getConnectedChannelById_(post.channelId);
+      const chTitle = truncate_((ch && ch.title) || post.chatId, 14);
+      kb.push([
+        { text: "✏️ ویرایش تکی در «" + chTitle + "»", callback_data: "ccp:editone:" + post.postId },
+        { text: "🗑 حذف تکی از «" + chTitle + "»", callback_data: "ccp:delone:" + post.postId }
+      ]);
+    });
+    if (b.posts.length > 3) {
+      kb.push([{ text: "🎯 انتخاب کانال برای ویرایش / حذف تکی (" + b.posts.length + " کانال)", callback_data: "ccp:batch:" + b.batchId + ":0" }]);
+    }
+    if (b.posts.length > 1) {
+      kb.push([
+        { text: "✏️ ویرایش در همه (" + b.posts.length + ")", callback_data: "ccp:editbatch:" + b.batchId },
+        { text: "🗑 حذف از همه (" + b.posts.length + ")", callback_data: "ccp:delbatch:" + b.batchId }
+      ]);
+    }
+  });
+  const nav = [];
+  if (p > 0) nav.push({ text: "⬅️ قبلی", callback_data: "ccp:list:" + (p - 1) + ":" + filter });
+  if (p < pages - 1) nav.push({ text: "➡️ بعدی", callback_data: "ccp:list:" + (p + 1) + ":" + filter });
+  if (nav.length) kb.push(nav);
+  kb.push([{ text: "📢 کانال‌های وصل‌شده", callback_data: "acc:list:0" }, { text: "🖼 پنل بنر", callback_data: "bn:panel" }]);
+  kb.push([{ text: "🏠 منو", callback_data: "a:home" }]);
+  sendMessage_(chatId, lines.join("\n"), { inline_keyboard: kb });
+}
+function showCcSinglePostPicker_(chatId, uid, page, filterType) {
+  if (!adminGate_(chatId, uid, "broadcast")) return;
+  clearSession_("M:" + uid);
+  const filter = String(filterType || "all");
+  const posts = getActiveCcPosts_().filter(function(p) {
+    if (p.sourceType === "cover_notify") return false;
+    if (filter === "banner") return p.sourceType === "banner";
+    if (filter === "message") return p.sourceType !== "banner";
+    return true;
+  }).sort(function(a, b) { return dateMillis_(b.createdAt) - dateMillis_(a.createdAt); });
+  const filterRow = [
+    { text: (filter === "all" ? "✅ " : "") + "همه", callback_data: "ccp:single:0:all" },
+    { text: (filter === "banner" ? "✅ " : "") + "🖼 بنرها", callback_data: "ccp:single:0:banner" },
+    { text: (filter === "message" ? "✅ " : "") + "📨 پیام‌ها", callback_data: "ccp:single:0:message" }
+  ];
+  if (!posts.length) {
+    sendMessage_(chatId, "🎯 ویرایش / حذف تکی در کانال‌ها\n\nهیچ پیام فعالی در این بخش ثبت نشده است.", {
+      inline_keyboard: [
+        filterRow,
+        [{ text: "📢 کانال‌های وصل‌شده", callback_data: "acc:list:0" }, { text: "🖼 پنل بنر", callback_data: "bn:panel" }],
+        [{ text: "🏠 منو", callback_data: "a:home" }]
+      ]
+    });
+    return;
+  }
+  const per = 5;
+  const pages = Math.max(1, Math.ceil(posts.length / per));
+  const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const lines = [
+    "🎯 ویرایش تکی یا حذف تکی پیام‌ها به تفکیک هر کانال",
+    "تعداد کل پیام‌های فعال: " + posts.length + " · صفحه " + (p + 1) + "/" + pages,
+    ""
+  ];
+  const kb = [filterRow];
+  posts.slice(p * per, p * per + per).forEach(function(post) {
+    const ch = getConnectedChannelById_(post.channelId);
+    const chTitle = (ch && ch.title) || post.chatId;
+    const shortCh = truncate_(chTitle, 14);
+    const preview = truncate_(post.caption || post.kind, 20);
+    lines.push("• 📺 «" + chTitle + "» — " + ccPostTypeLabel_(post.sourceType) + " (#" + post.messageId + "): «" + preview + "»");
+    kb.push([
+      { text: "✏️ ویرایش تکی در «" + shortCh + "»", callback_data: "ccp:editone:" + post.postId },
+      { text: "🗑 حذف تکی از «" + shortCh + "»", callback_data: "ccp:delone:" + post.postId }
+    ]);
+  });
+  const nav = [];
+  if (p > 0) nav.push({ text: "⬅️ قبلی", callback_data: "ccp:single:" + (p - 1) + ":" + filter });
+  if (p < pages - 1) nav.push({ text: "➡️ بعدی", callback_data: "ccp:single:" + (p + 1) + ":" + filter });
+  if (nav.length) kb.push(nav);
+  kb.push([{ text: "📋 نمای دسته‌ای (همه)", callback_data: "ccp:list:0:" + filter }]);
+  kb.push([{ text: "📢 کانال‌های وصل‌شده", callback_data: "acc:list:0" }, { text: "🖼 پنل بنر", callback_data: "bn:panel" }]);
+  kb.push([{ text: "🏠 منو", callback_data: "a:home" }]);
+  sendMessage_(chatId, lines.join("\n"), { inline_keyboard: kb });
+}
+function showCcBatchDetail_(chatId, uid, batchId, page) {
+  if (!adminGate_(chatId, uid, "broadcast")) return;
+  clearSession_("M:" + uid);
+  const posts = getActiveCcPosts_().filter(function(p) { return p.batchId === String(batchId); });
+  if (!posts.length) {
+    sendMessage_(chatId, "این پیام در هیچ کانالی فعال نیست (حذف شده است).");
+    showCcPostsList_(chatId, uid, 0, "all");
+    return;
+  }
+  const first = posts[0];
+  const per = 5;
+  const pages = Math.max(1, Math.ceil(posts.length / per));
+  const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const lines = [
+    "📋 جزئیات پیام ارسال‌شده (" + ccPostTypeLabel_(first.sourceType) + ")",
+    "نوع: " + first.kind + " · 🗓 " + formatDate_(first.createdAt),
+    first.caption ? ("متن/کپشن: «" + truncate_(first.caption, 200) + "»") : "",
+    "📺 فعال در " + posts.length + " کانال (صفحه " + (p + 1) + "/" + pages + "):",
+    ""
+  ].filter(Boolean);
+  const kb = [
+    [
+      { text: "✏️ ویرایش در همهٔ کانال‌ها (" + posts.length + ")", callback_data: "ccp:editbatch:" + batchId },
+      { text: "🗑 حذف از همهٔ کانال‌ها (" + posts.length + ")", callback_data: "ccp:delbatch:" + batchId }
+    ]
+  ];
+  posts.slice(p * per, p * per + per).forEach(function(post) {
+    const ch = getConnectedChannelById_(post.channelId);
+    const chTitle = truncate_((ch && ch.title) || post.chatId, 18);
+    lines.push("• 📺 " + ((ch && ch.title) || post.chatId) + " (پیام #" + post.messageId + ")");
+    kb.push([
+      { text: "✏️ ویرایش در «" + chTitle + "»", callback_data: "ccp:editone:" + post.postId },
+      { text: "🗑 حذف از «" + chTitle + "»", callback_data: "ccp:delone:" + post.postId }
+    ]);
+  });
+  const nav = [];
+  if (p > 0) nav.push({ text: "⬅️ قبلی", callback_data: "ccp:batch:" + batchId + ":" + (p - 1) });
+  if (p < pages - 1) nav.push({ text: "➡️ بعدی", callback_data: "ccp:batch:" + batchId + ":" + (p + 1) });
+  if (nav.length) kb.push(nav);
+  kb.push([{ text: "⬅️ بازگشت به لیست پیام‌ها", callback_data: "ccp:list:0:all" }, { text: "🏠 منو", callback_data: "a:home" }]);
+  sendMessage_(chatId, lines.join("\n"), { inline_keyboard: kb });
+}
+function showCcChannelPosts_(chatId, uid, channelId, page) {
+  if (!adminGate_(chatId, uid, "broadcast")) return;
+  clearSession_("M:" + uid);
+  const ch = getConnectedChannelById_(channelId);
+  if (!ch) {
+    sendMessage_(chatId, "کانال پیدا نشد.");
+    showAdminConnectedChannels_(chatId, uid, 0);
+    return;
+  }
+  const posts = getActiveCcPosts_().filter(function(p) { return p.sourceType !== "cover_notify" && (p.channelId === String(channelId) || p.chatId === String(ch.chatId)); })
+    .sort(function(a, b) { return dateMillis_(b.createdAt) - dateMillis_(a.createdAt); });
+  const shortTitle = truncate_(ch.title || ch.chatId, 18);
+  if (!posts.length) {
+    sendMessage_(chatId, "📺 «" + (ch.title || ch.chatId) + "»\nهیچ پیام فعالی از طرف بات در این کانال ثبت نشده است.\nمی‌توانی همین الان پیام یا بنر تکی به این کانال بفرستی:", {
+      inline_keyboard: [
+        [
+          { text: "📤 ارسال تکی پیام به «" + shortTitle + "»", callback_data: "acc:sendone:" + ch.id },
+          { text: "🖼 ارسال تکی بنر به «" + shortTitle + "»", callback_data: "bn:sendone:" + ch.id + ":0" }
+        ],
+        [{ text: "⬅️ بازگشت به کانال‌ها", callback_data: "acc:list:0" }, { text: "🏠 منو", callback_data: "a:home" }]
+      ]
+    });
+    return;
+  }
+  const per = 5;
+  const pages = Math.max(1, Math.ceil(posts.length / per));
+  const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const lines = [
+    "📺 پیام‌های بات در کانال «" + (ch.title || ch.chatId) + "»",
+    "تعداد پیام‌های فعال: " + posts.length + " · صفحه " + (p + 1) + "/" + pages,
+    ""
+  ];
+  const kb = [
+    [
+      { text: "📤 ارسال تکی پیام جدید به «" + shortTitle + "»", callback_data: "acc:sendone:" + ch.id },
+      { text: "🖼 ارسال تکی بنر", callback_data: "bn:sendone:" + ch.id + ":0" }
+    ]
+  ];
+  posts.slice(p * per, p * per + per).forEach(function(post) {
+    const preview = truncate_(post.caption || post.kind, 22);
+    lines.push("• " + ccPostTypeLabel_(post.sourceType) + " (#" + post.messageId + ") — «" + preview + "» · 🗓 " + formatDate_(post.createdAt));
+    kb.push([
+      { text: "✏️ ویرایش تکی «" + truncate_(preview, 14) + "»", callback_data: "ccp:editone:" + post.postId },
+      { text: "🗑 حذف تکی «" + truncate_(preview, 14) + "»", callback_data: "ccp:delone:" + post.postId }
+    ]);
+  });
+  const nav = [];
+  if (p > 0) nav.push({ text: "⬅️ قبلی", callback_data: "ccp:ch:" + channelId + ":" + (p - 1) });
+  if (p < pages - 1) nav.push({ text: "➡️ بعدی", callback_data: "ccp:ch:" + channelId + ":" + (p + 1) });
+  if (nav.length) kb.push(nav);
+  kb.push([{ text: "🗑 حذف همهٔ پیام‌های بات در این کانال (" + posts.length + ")", callback_data: "ccp:delchall:" + channelId }]);
+  kb.push([{ text: "⬅️ بازگشت به کانال‌ها", callback_data: "acc:list:0" }, { text: "🏠 منو", callback_data: "a:home" }]);
+  sendMessage_(chatId, lines.join("\n"), { inline_keyboard: kb });
+}
+function handleCcPostsCallback_(cb) {
+  const uid = String(cb.from.id); const chatId = String(cb.message.chat.id);
+  if (!hasAdminPermission_(uid, "broadcast")) { answerCallbackQuery_(cb.id, "دسترسی نداری."); return; }
+  const parts = String(cb.data || "").split(":");
+  const action = parts[1] || "list";
+  if (action === "list") {
+    answerCallbackQuery_(cb.id);
+    showCcPostsList_(chatId, uid, Number(parts[2]) || 0, parts[3] || "all");
+    return;
+  }
+  if (action === "single") {
+    answerCallbackQuery_(cb.id);
+    showCcSinglePostPicker_(chatId, uid, Number(parts[2]) || 0, parts[3] || "all");
+    return;
+  }
+  if (action === "batch") {
+    answerCallbackQuery_(cb.id);
+    showCcBatchDetail_(chatId, uid, parts[2] || "", Number(parts[3]) || 0);
+    return;
+  }
+  if (action === "ch") {
+    answerCallbackQuery_(cb.id);
+    showCcChannelPosts_(chatId, uid, parts[2] || "", Number(parts[3]) || 0);
+    return;
+  }
+  if (action === "editone") {
+    const postId = parts[2] || "";
+    const post = getCcPostById_(postId);
+    if (!post || post.status !== "active") { answerCallbackQuery_(cb.id, "این پیام دیگر فعال نیست."); showCcSinglePostPicker_(chatId, uid, 0, "all"); return; }
+    const ch = getConnectedChannelById_(post.channelId);
+    const chTitle = (ch && ch.title) || post.chatId;
+    setSession_("M:" + uid, "ADM_CC_POST_EDIT", { mode: "post", postId: post.postId, batchId: post.batchId });
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, "✏️ متن، عکس، ویدیو، صوت یا فایل جدید را بفرست تا این پیام **فقط در کانال «" + chTitle + "»** ویرایش/جایگزین شود:", cancelKeyboard_());
+    return;
+  }
+  if (action === "editbatch") {
+    const batchId = parts[2] || "";
+    const posts = getActiveCcPosts_().filter(function(p) { return p.batchId === batchId; });
+    if (!posts.length) { answerCallbackQuery_(cb.id, "پیام فعالی در این دسته نیست."); showCcPostsList_(chatId, uid, 0, "all"); return; }
+    setSession_("M:" + uid, "ADM_CC_POST_EDIT", { mode: "batch", batchId: batchId });
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, "✏️ متن، عکس، ویدیو، صوت یا فایل جدید را بفرست تا این پیام در همهٔ " + posts.length + " کانال ویرایش شود:", cancelKeyboard_());
+    return;
+  }
+  if (action === "editalltype") {
+    const sType = parts[2] || "banner";
+    const posts = getActiveCcPosts_().filter(function(p) { return p.sourceType === sType; });
+    if (!posts.length) { answerCallbackQuery_(cb.id, "هیچ مورد فعالی در کانال‌ها نیست."); showCcBannerPanel_(chatId, uid); return; }
+    setSession_("M:" + uid, "ADM_CC_POST_EDIT", { mode: "type", sourceType: sType });
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, "✏️ متن، عکس، ویدیو، صوت یا فایل جدید را بفرست تا در همهٔ " + posts.length + " کانال ویرایش شود:", cancelKeyboard_());
+    return;
+  }
+  if (action === "delone") {
+    const postId = parts[2] || "";
+    const post = getCcPostById_(postId);
+    if (!post || post.status !== "active") { answerCallbackQuery_(cb.id, "قبلاً حذف شده است."); showCcSinglePostPicker_(chatId, uid, 0, "all"); return; }
+    const ch = getConnectedChannelById_(post.channelId);
+    const chTitle = (ch && ch.title) || post.chatId;
+    const r = deleteCcPostRecord_(post);
+    logAdminAction_(uid, "cc_post_del_one", postId, r.ok ? "ok" : r.desc);
+    answerCallbackQuery_(cb.id, r.ok ? ("🗑 از «" + truncate_(chTitle, 18) + "» حذف شد.") : ("⚠️ خطا: " + truncate_(r.desc, 40)));
+    sendMessage_(chatId, r.ok ? ("🗑 پیام از کانال «" + chTitle + "» حذف شد.") : ("⚠️ حذف پیام از «" + chTitle + "» ناموفق بود: " + r.desc));
+    showCcChannelPosts_(chatId, uid, post.channelId, 0);
+    return;
+  }
+  if (action === "delbatch") {
+    const batchId = parts[2] || "";
+    const posts = getActiveCcPosts_().filter(function(p) { return p.batchId === batchId; });
+    let okCount = 0; let failCount = 0;
+    posts.forEach(function(p) {
+      const r = deleteCcPostRecord_(p);
+      if (r.ok) okCount++; else failCount++;
+    });
+    logAdminAction_(uid, "cc_post_del_batch", batchId, "ok=" + okCount + ",fail=" + failCount);
+    answerCallbackQuery_(cb.id, "🗑 حذف شد: " + okCount + (failCount ? " · خطا: " + failCount : ""));
+    sendMessage_(chatId, "🗑 پیام از " + okCount + " کانال حذف شد" + (failCount ? " (⛔ ناموفق: " + failCount + ")" : "") + ".");
+    showCcPostsList_(chatId, uid, 0, "all");
+    return;
+  }
+  if (action === "delalltype") {
+    const sType = parts[2] || "banner";
+    const posts = getActiveCcPosts_().filter(function(p) { return p.sourceType === sType; });
+    if (!posts.length) { answerCallbackQuery_(cb.id, "هیچ مورد فعالی در کانال‌ها نیست."); showCcBannerPanel_(chatId, uid); return; }
+    let okCount = 0; let failCount = 0;
+    posts.forEach(function(p) {
+      const r = deleteCcPostRecord_(p);
+      if (r.ok) okCount++; else failCount++;
+    });
+    logAdminAction_(uid, "cc_post_del_type", sType, "ok=" + okCount + ",fail=" + failCount);
+    answerCallbackQuery_(cb.id, "🗑 حذف شد: " + okCount);
+    sendMessage_(chatId, "🗑 از " + okCount + " کانال حذف شد" + (failCount ? " (⛔ ناموفق: " + failCount + ")" : "") + ".");
+    if (sType === "banner") showCcBannerPanel_(chatId, uid);
+    else showCcPostsList_(chatId, uid, 0, "all");
+    return;
+  }
+  if (action === "delchall") {
+    const channelId = parts[2] || "";
+    const ch = getConnectedChannelById_(channelId);
+    const posts = getActiveCcPosts_().filter(function(p) { return p.sourceType !== "cover_notify" && (p.channelId === String(channelId) || (ch && p.chatId === String(ch.chatId))); });
+    let okCount = 0; let failCount = 0;
+    posts.forEach(function(p) {
+      const r = deleteCcPostRecord_(p);
+      if (r.ok) okCount++; else failCount++;
+    });
+    logAdminAction_(uid, "cc_post_del_channel", channelId, "ok=" + okCount + ",fail=" + failCount);
+    answerCallbackQuery_(cb.id, "🗑 حذف شد: " + okCount);
+    showAdminConnectedChannels_(chatId, uid, 0);
+    return;
+  }
+  answerCallbackQuery_(cb.id);
+  showCcPostsList_(chatId, uid, 0, "all");
 }
