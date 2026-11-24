@@ -5,10 +5,10 @@
  * دادهٔ استان/شهر ایران برگرفته از sajaddp/list-of-cities-in-Iran (GPL-3.0):
  * https://github.com/sajaddp/list-of-cities-in-Iran
  *
- * نسخه: 0.12.1-cc
+ * نسخه: 0.13.0-cc
  */
 const APP = {
-  VERSION: "0.12.1-cc",
+  VERSION: "0.13.1-cc",
   TZ: "Asia/Tehran",
   SHEETS: {
     SETTINGS: "Settings", USERS: "Users", SESSIONS: "Sessions", STARTS: "Starts",
@@ -20,6 +20,13 @@ const APP = {
     CONNECTED_CHANNELS: "ConnectedChannels",
     CC_BANNER: "CcBanner",
     CC_POSTS: "CcPosts",
+    PUBLISH_CHANNELS: "PublishChannels",
+    SUBMISSION_CHANNELS: "SubmissionChannels",
+    PLANS: "SubscriptionPlans",
+    SUBSCRIPTIONS: "Subscriptions",
+    PAYMENT_REQUESTS: "PaymentRequests",
+    ARTIST_LINKS: "ArtistLinks",
+    ARTIST_LINKS_HISTORY: "ArtistLinksHistory",
     DELIVERY_LOG: "DeliveryLog", ADMIN_LOG: "AdminLog", ERROR_LOG: "ErrorLog"
   }
 };
@@ -54,6 +61,13 @@ let SUPPORT_MESSAGES_MEMO_ = null;
 let BOT_USERNAME_MEMO_ = null;
 let DEFAULT_COVER_BLOB_MEMO_ = null;
 let CHANNEL_LINK_MEMO_ = null;
+let PUBLISH_CHANNELS_MEMO_ = null;
+let SUBMISSION_CHANNELS_MEMO_ = null;
+let PLANS_MEMO_ = null;
+let SUBSCRIPTIONS_MEMO_ = null;
+let PAYMENT_REQUESTS_MEMO_ = null;
+let ARTIST_LINKS_MEMO_ = null;
+let ARTIST_LINKS_HISTORY_MEMO_ = null;
 function resetRuntimeCaches_() {
   DB_INSTANCE_MEMO_ = null; SHEET_INSTANCE_MEMO_ = {};
   SETTINGS_ROWS_MEMO_ = null; SETTINGS_INDEX_MEMO_ = null;
@@ -66,6 +80,9 @@ function resetRuntimeCaches_() {
   MUSIC_LIBRARY_MEMO_ = null; MUSIC_DOWNLOADS_MEMO_ = null; ADMIN_ACCESS_MEMO_ = null;
   SUPPORT_MESSAGES_MEMO_ = null; BOT_USERNAME_MEMO_ = null; CHANNEL_LINK_MEMO_ = null;
   CONNECTED_CHANNELS_MEMO_ = null; CC_BANNER_MEMO_ = null; CC_POSTS_MEMO_ = null; BOT_USER_ID_MEMO_ = null;
+  PUBLISH_CHANNELS_MEMO_ = null; SUBMISSION_CHANNELS_MEMO_ = null;
+  PLANS_MEMO_ = null; SUBSCRIPTIONS_MEMO_ = null; PAYMENT_REQUESTS_MEMO_ = null;
+  ARTIST_LINKS_MEMO_ = null; ARTIST_LINKS_HISTORY_MEMO_ = null;
 }
 
 const HEADERS = {
@@ -77,7 +94,7 @@ const HEADERS = {
   ResetRequests: ["request_id", "user_id", "phone", "first_name", "last_name", "rap_name", "status", "created_at", "reviewed_by", "reviewed_at"],
   MusicDrafts: ["draft_id", "user_id", "mode", "data_json", "status", "created_at", "updated_at"],
   DraftMedia: ["draft_id", "seq", "kind", "file_id", "caption", "media_group_id", "source_chat_id", "source_message_id", "created_at", "file_size", "mime_type"],
-  MusicSubmissions: ["submission_id", "user_id", "mode", "title", "artists", "featuring", "caption", "links", "status", "scheduled_at", "created_at", "updated_at", "published_at", "visual_message_ids", "audio_message_ids", "publish_stage", "request_json", "failure", "review_note", "reviewed_by"],
+  MusicSubmissions: ["submission_id", "user_id", "mode", "title", "artists", "featuring", "caption", "links", "status", "scheduled_at", "created_at", "updated_at", "published_at", "visual_message_ids", "audio_message_ids", "publish_stage", "request_json", "failure", "review_note", "reviewed_by", "channels_json", "template", "link_snapshot"],
   MusicCredits: ["submission_id", "role", "person", "sort"],
   MusicMedia: ["submission_id", "seq", "kind", "file_id", "caption", "media_group_id", "source_chat_id", "source_message_id", "file_size", "mime_type"],
   MusicLibrary: ["track_id", "submission_id", "seq", "title", "artists", "file_id", "download_allowed", "created_at", "updated_at", "rights_approved_by", "rights_approved_at", "published_at", "download_count"],
@@ -91,6 +108,13 @@ const HEADERS = {
   ConnectedChannels: ["id", "user_id", "chat_id", "username", "title", "members", "status", "connected_at", "last_ok_at", "last_error"],
   CcBanner: ["id", "seq", "source_chat_id", "source_message_id", "kind", "caption", "created_by", "created_at", "active"],
   CcPosts: ["post_id", "batch_id", "source_type", "channel_id", "chat_id", "message_id", "kind", "caption", "file_id", "status", "created_by", "created_at", "updated_at"],
+  PublishChannels: ["channel_id", "title", "username", "template", "access", "footer", "price_label", "active", "sort", "created_at", "updated_at"],
+  SubmissionChannels: ["submission_id", "channel_id", "channel_title", "template", "access", "status", "message_ids", "error", "created_at", "updated_at"],
+  SubscriptionPlans: ["plan_id", "name", "price", "days", "track_quota", "channel_scope", "channels_json", "badge", "active", "sort", "created_at"],
+  Subscriptions: ["subscription_id", "user_id", "plan_id", "status", "slots_total", "slots_used", "period_start", "expires_at", "channels_json", "granted_by", "payment_id", "note", "created_at", "updated_at"],
+  PaymentRequests: ["request_id", "user_id", "plan_id", "plan_name", "amount", "ref_code", "receipt_file_id", "status", "admin_note", "created_at", "reviewed_by", "reviewed_at"],
+  ArtistLinks: ["user_id", "platform", "url", "version", "source", "updated_at"],
+  ArtistLinksHistory: ["user_id", "platform", "version", "url", "source", "archived_at", "reason"],
   ErrorLog: ["log_id", "where", "message", "extra", "user_id", "created_at"]
 };
 
@@ -107,6 +131,30 @@ const DEFAULT_SETTINGS = {
   BOT_MODE: "active", MAINTENANCE_TEXT: "🛠 بات موقتاً در حال به‌روزرسانی است. کمی بعد دوباره امتحان کن.",
   PUBLISH_MODE: "auto", PUBLISH_ENABLED: "true", PUBLISH_INTERVAL_MIN: "10",
   CHANNEL_ID: "", CHANNEL_FOOTER: "", PUBLISH_DESTINATIONS: "", BOT_USERNAME: "", DEFAULT_COVER_FILE_ID: "",
+  // ── نسخهٔ ۰.۱۳ ── انتشار چندکاناله، قالب‌های پست و اشتراک VIP
+  MULTI_CHANNEL_ENABLED: "true",
+  // قالب کانال اصلی: classic | story | audio_only | full_track | vip
+  MAIN_CHANNEL_TEMPLATE: "classic",
+  MAIN_CHANNEL_ACCESS: "free", // free | paid — کانال اصلی رایگان است مگر مدیر پولی کند
+  // انتخاب کانال‌ها برای هر ارسال: admin (مدیر از تنظیمات تعیین می‌کند) یا user (هنرمند انتخاب می‌کند)
+  CHANNEL_SELECTION_MODE: "admin",
+  // در حالت admin: all = همهٔ کانال‌های مجاز، free = فقط کانال‌های رایگان، یا فهرست شناسه‌ها با کاما
+  DEFAULT_PUBLISH_CHANNELS: "free",
+  VIP_ENABLED: "true",
+  VIP_TEMPLATE_AUTO: "false", // اگر روشن باشد، کاربر VIP روی کانال با قالب کلاسیک، قالب ویژهٔ VIP می‌گیرد
+  VIP_REQUIRED_MESSAGE: "💎 برای انتشار در این کانال باید اشتراک فعال داشته باشی. از «💎 اشتراک VIP» یک پلن انتخاب کن.",
+  PAYMENT_CARD_NUMBER: "6037-9975-0000-0000",
+  PAYMENT_CARD_HOLDER: "نام و نام خانوادگی صاحب کارت",
+  PAYMENT_INSTRUCTIONS: "مبلغ را به کارت بالا واریز کن و سپس شمارهٔ پیگیری/۴ رقم آخر کارت خودت را همین‌جا بفرست. رسید عکس را هم می‌توانی ارسال کنی.",
+  PAYMENT_AUTO_APPROVE: "false",
+  VIP_SLOTS_DEFAULT: "3",
+  VIP_DAYS_DEFAULT: "30",
+  // لینک پلتفرم هنرمند: اگر کاربر هنوز لینکی ثبت نکرده، ربات یک بار اصرار می‌کند
+  REQUIRE_ARTIST_LINK: "true",
+  ARTIST_LINK_PLATFORMS: "instagram,soundcloud,youtube,telegram,spotify",
+  ARTIST_LINK_MAX_VERSIONS: "50",
+  POST_VIP_BADGE: "💎 VIP",
+  POST_STORY_LABEL: "داستان این آهنگ",
   MUSIC_DOWNLOAD_DEFAULT_ENABLED: "true", // پیش‌فرض روشن برای همه پست‌ها — درخواست کاربر
   TIMEZONE: "Asia/Tehran",
   INACTIVE_AFTER_DAYS: "30", INACTIVE_REPEAT_DAYS: "90", BROADCAST_BATCH: "10",
@@ -644,13 +692,27 @@ const SETTINGS_CHOICE_OPTIONS_ = {
   BTN_STYLE_INLINE: { label: "رنگ دکمه‌های شیشه‌ای", options: [{ value: "default", label: "پیش‌فرض" }, { value: "primary", label: "آبی" }, { value: "success", label: "سبز" }, { value: "danger", label: "قرمز" }] },
   BTN_STYLE_DANGER: { label: "رنگ دکمه‌های هشدار", options: [{ value: "default", label: "پیش‌فرض" }, { value: "primary", label: "آبی" }, { value: "success", label: "سبز" }, { value: "danger", label: "قرمز" }] },
   DEFAULT_LANG: { label: "زبان پیش‌فرض", options: [{ value: "fa", label: "فارسی" }, { value: "en", label: "English" }] },
+  MULTI_CHANNEL_ENABLED: { label: "انتشار چندکاناله", options: [{ value: "true", label: "روشن" }, { value: "false", label: "خاموش" }] },
+  VIP_ENABLED: { label: "سیستم اشتراک VIP", options: [{ value: "true", label: "روشن" }, { value: "false", label: "خاموش" }] },
+  VIP_TEMPLATE_AUTO: { label: "قالب ویژهٔ VIP خودکار", options: [{ value: "true", label: "روشن" }, { value: "false", label: "خاموش" }] },
+  PAYMENT_AUTO_APPROVE: { label: "تأیید خودکار پرداخت", options: [{ value: "false", label: "دستی (پیش‌فرض)" }, { value: "true", label: "خودکار" }] },
+  REQUIRE_ARTIST_LINK: { label: "اجبار لینک هنرمند", options: [{ value: "true", label: "روشن" }, { value: "false", label: "خاموش" }] },
+  CHANNEL_SELECTION_MODE: { label: "انتخاب کانال", options: [{ value: "admin", label: "مدیر تعیین می‌کند" }, { value: "user", label: "هنرمند انتخاب می‌کند" }] },
+  MAIN_CHANNEL_TEMPLATE: { label: "قالب کانال اصلی", options: [
+    { value: "classic", label: "کلاسیک (کاور + توضیحات + برش)" },
+    { value: "story", label: "کاور + داستان + دکمه" },
+    { value: "audio_only", label: "فقط برش صوتی + دکمه" },
+    { value: "full_track", label: "آهنگ کامل" },
+    { value: "vip", label: "ویژهٔ VIP" }
+  ] },
+  MAIN_CHANNEL_ACCESS: { label: "دسترسی کانال اصلی", options: [{ value: "free", label: "رایگان" }, { value: "paid", label: "فقط VIP" }] },
   PUBLISH_INTERVAL_MIN: { label: "فاصلهٔ انتشار (دقیقه)", options: [1, 5, 10, 15, 30, 60].map(function(n) { return { value: String(n), label: n + " دقیقه" }; }), allowCustom: true },
   INACTIVE_AFTER_DAYS: { label: "آستانهٔ کاربر غیرفعال (روز)", options: [7, 14, 30, 60, 90].map(function(n) { return { value: String(n), label: n + " روز" }; }), allowCustom: true },
   INACTIVE_REPEAT_DAYS: { label: "تکرار پیام غیرفعال‌ها (روز)", options: [30, 60, 90, 180].map(function(n) { return { value: String(n), label: n + " روز" }; }), allowCustom: true },
   BROADCAST_BATCH: { label: "اندازهٔ دستهٔ پیام همگانی", options: [5, 10, 20, 50].map(function(n) { return { value: String(n), label: String(n) }; }), allowCustom: true },
   TIMEZONE: { label: "منطقهٔ زمانی", options: [{ value: "Asia/Tehran", label: "تهران" }, { value: "Europe/Amsterdam", label: "آمستردام" }, { value: "UTC", label: "UTC" }], allowCustom: true }
 };
-const SETTINGS_CHANNEL_KEYS_ = ["CHANNEL_ID", "CHANNEL_FOOTER", "PUBLISH_DESTINATIONS", "PUBLISH_MODE", "PUBLISH_ENABLED", "PUBLISH_INTERVAL_MIN", "BOT_USERNAME", "TIMEZONE", "STAGING_CHANNEL_ID"];
+const SETTINGS_CHANNEL_KEYS_ = ["CHANNEL_ID", "CHANNEL_FOOTER", "PUBLISH_DESTINATIONS", "PUBLISH_MODE", "PUBLISH_ENABLED", "PUBLISH_INTERVAL_MIN", "BOT_USERNAME", "TIMEZONE", "STAGING_CHANNEL_ID", "MULTI_CHANNEL_ENABLED", "MAIN_CHANNEL_TEMPLATE", "MAIN_CHANNEL_ACCESS", "CHANNEL_SELECTION_MODE", "DEFAULT_PUBLISH_CHANNELS"];
 
 // اگر پستی نیمه‌کاره در کانال ماند، صف تا این مدت قفل می‌شود؛ بعد از آن صف ادامه می‌دهد تا کانال برای همیشه نخوابد.
 const PARTIAL_PUBLISH_LOCK_MINUTES_ = 30;
@@ -687,6 +749,61 @@ const MSG = {
     BTN_SEND_MUSIC: "🎵 ارسال موزیک", BTN_SEND_ALBUM: "🎼 ارسال آلبوم", BTN_COMING_SOON: "⏳ Coming Soon", BTN_FREESTYLE: "🎤 فری‌استایل",
     BTN_MY_WORKS: "📚 آثار من", BTN_MY_STATS: "📊 آمار آثار", BTN_PROFILE: "👤 پروفایل", BTN_LOGOUT: "🚪 خروج", BTN_CANCEL: "❌ لغو",
     BTN_MY_CHANNELS: "📢 کانال‌های من", BTN_PREV_STEP: "⬅️ مرحلهٔ قبل", BTN_SEARCH_WORKS: "🔍 جست‌وجوی آثار",
+    BTN_VIP: "💎 اشتراک VIP", BTN_MY_LINKS: "🔗 لینک‌های من",
+    // ── نسخهٔ ۰.۱۳: اشتراک، قالب‌ها و لینک هنرمند ──
+    VIP_PANEL_TITLE: "💎 باشگاه اشتراک فلورا",
+    VIP_STATUS_NONE: "🚫 اشتراک فعال نداری. با اشتراک می‌توانی اثرت را در همهٔ کانال‌های ویژه منتشر کنی.",
+    VIP_STATUS_ACTIVE: "✅ اشتراک فعال: {p}\\n⏳ اعتبار تا: {e}\\n🎵 سهمیهٔ این دوره: {u}/{q}\\n📡 کانال‌ها: {c}",
+    VIP_STATUS_EXPIRED: "⌛️ اشتراک «{p}» در {e} تمام شده است.",
+    VIP_NO_PLANS: "فعلاً پلنی تعریف نشده است؛ کمی بعد دوباره سر بزن.",
+    VIP_PLAN_LINE: "💠 {n} — {price} تومان\\n⏳ {d} روز · 🎵 {q} ترک · 📡 {c}",
+    VIP_PICK_PLAN: "یک پلن انتخاب کن:",
+    VIP_PAY_TITLE: "💳 پرداخت اشتراک «{p}»",
+    VIP_PAY_BODY: "💰 مبلغ: {amount} تومان\\n💳 شمارهٔ کارت:\\n<code>{card}</code>\\n👤 {holder}\\n\\n{instructions}\\n\\nبعد از واریز، شمارهٔ پیگیری یا ۴ رقم آخر کارت را همین‌جا بفرست (یا عکس رسید را ارسال کن).",
+    VIP_PAY_ASK_REF: "🧾 شمارهٔ پیگیری/۴ رقم آخر کارت یا عکس رسید را بفرست. برای لغو «❌ لغو» را بزن.",
+    VIP_PAY_SUBMITTED: "✅ درخواست اشتراک ثبت شد و برای بررسی مدیر رفت. بعد از تأیید بهت خبر می‌دهیم.",
+    VIP_PAY_RECEIVED: "✅ رسید دریافت شد و درخواستت برای بررسی مدیر ثبت شد.",
+    VIP_PAY_APPROVED: "🎉 اشتراک «{p}» فعال شد!\\n⏳ اعتبار تا {e} · 🎵 {q} ترک · 📡 {c}",
+    VIP_PAY_REJECTED: "❌ درخواست اشتراکت تأیید نشد.{note}",
+    VIP_REQUIRED: "💎 این کانال مخصوص اعضای VIP است. از «💎 اشتراک VIP» یک پلن بگیر.",
+    VIP_QUOTA_END: "⛔️ سهمیهٔ ترک این دوره ({q}) تمام شده. برای ادامه، پلن را تمدید کن.",
+    VIP_BADGE_LINE: "💎 {b} — انتشار ویژه",
+    CHANNEL_PICK_TITLE: "📡 این اثر در کدام کانال‌ها منتشر شود؟",
+    CHANNEL_PICK_NOTE: "کانال‌های رایگان همیشه فعال‌اند؛ کانال‌های VIP با اشتراک فعال باز می‌شوند.",
+    CHANNEL_PICK_BTN: "📡 انتخاب کانال‌های انتشار",
+    CHANNEL_NONE_AVAILABLE: "⚠️ هیچ کانال انتشار فعالی وجود ندارد؛ با مدیر تماس بگیر.",
+    CHANNEL_LOCKED_SUFFIX: " 🔒",
+    CHANNEL_FREE_SUFFIX: " · رایگان",
+    ARTIST_LINKS_TITLE: "🔗 لینک‌های پلتفرم هنرمند",
+    ARTIST_LINKS_EMPTY: "هنوز لینکی ثبت نکرده‌ای. از دکمه‌های زیر پلتفرم‌هایت را اضافه کن:",
+    ARTIST_LINKS_ONBOARD: "🔗 یک قدم مهم: لینک پلتفرم‌هایت (اینستاگرام، ساندکلاد، یوتیوب، تلگرام، اسپاتیفای…) را ثبت کن تا در پروفایلت ذخیره شود و در پست‌هایت استفاده کنیم.\nبدون لینک، امکان انتشار نداری.",
+    ARTIST_LINKS_LEGEND: "👤 از پروفایل · ✍️ ورود دستی · ⏭ رد کردن · 🗂 تاریخچهٔ نسخه‌ها",
+    ARTIST_LINKS_ADD: "➕ افزودن لینک",
+    ARTIST_LINKS_EDIT: "✏️ ویرایش",
+    ARTIST_LINKS_DEL: "🗑 حذف",
+    ARTIST_LINKS_ASK: "لینک {p} را بفرست (مثلاً https://…):",
+    ARTIST_LINKS_BAD: "❌ لینک معتبر نیست. یک آدرس کامل بفرست.",
+    ARTIST_LINKS_SAVED: "✅ لینک {p} ذخیره شد (نسخهٔ {v}). نسخهٔ قبلی در شیت تاریخچه نگه داشته شد.",
+    ARTIST_LINKS_DELETED: "🗑 لینک {p} حذف شد؛ نسخهٔ قبلی در تاریخچه باقی ماند.",
+    ARTIST_LINKS_HISTORY: "🗂 تاریخچهٔ {p}",
+    ARTIST_LINKS_VERSION: "نسخهٔ {v}: {u}",
+    ARTIST_LINKS_PANEL_NOTE: "برای هر پلتفرم یکی را انتخاب کن: از پروفایل، ورود دستی یا رد کردن.",
+    ARTIST_LINKS_FROM_PROFILE: "👤 از پروفایل",
+    ARTIST_LINKS_MANUAL: "✍️ دستی",
+    ARTIST_LINKS_SKIP: "⏭ رد کردن",
+    ARTIST_LINKS_SKIPPED: "⏭ {p} رد شد.",
+    ARTIST_LINKS_FROM_PROFILE_DONE: "✅ لینک {p} از پروفایل برداشته شد.",
+    ARTIST_LINKS_PROFILE_MISSING: "⚠️ برای {p} لینکی در پروفایلت نیست؛ دستی وارد کن یا رد کن.",
+    ARTIST_LINKS_MANUAL_ASK: "لینک {p} را بفرست:",
+    ARTIST_LINKS_REQUIRED: "⚠️ بدون لینک پلتفرم نمی‌توانی منتشر کنی. حداقل یکی از پلتفرم‌هایت را بده تا در پروفایلت ذخیره شود.",
+    ARTIST_LINKS_SAVE_PROFILE_Q: "این لینک {p} خودت است؟ ثبتش کنم در پروفایلت که ازت حمایت کنیم؟",
+    ARTIST_LINKS_SAVE_YES: "✅ بله، در پروفایل ذخیره کن",
+    ARTIST_LINKS_SAVE_NO: "❌ نه، فقط برای همین پست",
+    ARTIST_LINKS_SAVED_PROFILE: "✅ لینک در پروفایلت ثبت شد.",
+    ARTIST_LINKS_USING_PROFILE: "🔗 لینک‌های پروفایل: {l}",
+    POST_TEMPLATE_CLASSIC: "کلاسیک", POST_TEMPLATE_STORY: "کاور + داستان", POST_TEMPLATE_AUDIO_ONLY: "فقط صدا",
+    POST_TEMPLATE_FULL_TRACK: "آهنگ کامل", POST_TEMPLATE_VIP: "ویژهٔ VIP",
+    SUBMIT_CHANNELS_LINE: "📡 کانال‌ها: {c}",
     CC_LIST_TITLE: "📢 کانال‌های وصل‌شدهٔ تو",
     CC_LIST_EMPTY: "هنوز کانالی وصل نکرده‌ای.\nبات را در کانالت ادمین کن (با دسترسی کامل) و بعد «➕ افزودن کانال» را بزن.",
     CC_ADD_ASK: "📢 آیدی یا نام کاربری کانالت را بفرست (مثل @mychannel یا -1001234567890).\nقبلش بات را در کانال ادمین کرده باش.",
@@ -955,6 +1072,60 @@ const MSG = {
     BTN_SEND_MUSIC: "🎵 Submit track", BTN_SEND_ALBUM: "🎼 Submit album", BTN_COMING_SOON: "⏳ Coming Soon", BTN_FREESTYLE: "🎤 Freestyle",
     BTN_MY_WORKS: "📚 My works", BTN_MY_STATS: "📊 My stats", BTN_PROFILE: "👤 Profile", BTN_LOGOUT: "🚪 Log out", BTN_CANCEL: "❌ Cancel",
     BTN_MY_CHANNELS: "📢 My channels", BTN_PREV_STEP: "⬅️ Previous step", BTN_SEARCH_WORKS: "🔍 Search works",
+    BTN_VIP: "💎 VIP subscription", BTN_MY_LINKS: "🔗 My links",
+    VIP_PANEL_TITLE: "💎 Flora subscription club",
+    VIP_STATUS_NONE: "🚫 No active subscription. Subscribe to publish on premium channels.",
+    VIP_STATUS_ACTIVE: "✅ Active plan: {p}\\n⏳ Valid until: {e}\\n🎵 This period: {u}/{q}\\n📡 Channels: {c}",
+    VIP_STATUS_EXPIRED: "⌛️ Plan «{p}» expired on {e}.",
+    VIP_NO_PLANS: "No plan defined yet. Check back soon.",
+    VIP_PLAN_LINE: "💠 {n} — {price} T\\n⏳ {d} days · 🎵 {q} tracks · 📡 {c}",
+    VIP_PICK_PLAN: "Pick a plan:",
+    VIP_PAY_TITLE: "💳 Payment for «{p}»",
+    VIP_PAY_BODY: "💰 Amount: {amount} T\\n💳 Card number:\\n<code>{card}</code>\\n👤 {holder}\\n\\n{instructions}\\n\\nAfter paying, send the reference number or last 4 digits here (or send a receipt photo).",
+    VIP_PAY_ASK_REF: "🧾 Send the payment reference, last 4 digits, or a receipt photo. Tap «❌ Cancel» to abort.",
+    VIP_PAY_SUBMITTED: "✅ Subscription request saved for admin review. We will notify you.",
+    VIP_PAY_RECEIVED: "✅ Receipt received and your request is pending review.",
+    VIP_PAY_APPROVED: "🎉 Plan «{p}» is active!\\n⏳ Until {e} · 🎵 {q} tracks · 📡 {c}",
+    VIP_PAY_REJECTED: "❌ Your subscription request was rejected.{note}",
+    VIP_REQUIRED: "💎 This channel is VIP-only. Get a plan from «💎 VIP subscription».",
+    VIP_QUOTA_END: "⛔️ Your track quota ({q}) is used up. Renew your plan to continue.",
+    VIP_BADGE_LINE: "💎 {b} — premium release",
+    CHANNEL_PICK_TITLE: "📡 Which channels should this release go to?",
+    CHANNEL_PICK_NOTE: "Free channels are always on; VIP channels need an active plan.",
+    CHANNEL_PICK_BTN: "📡 Choose channels",
+    CHANNEL_NONE_AVAILABLE: "⚠️ No active publish channel configured. Contact the admin.",
+    CHANNEL_LOCKED_SUFFIX: " 🔒",
+    CHANNEL_FREE_SUFFIX: " · free",
+    ARTIST_LINKS_TITLE: "🔗 Artist platform links",
+    ARTIST_LINKS_EMPTY: "No links yet. Add your platforms with the buttons below:",
+    ARTIST_LINKS_ONBOARD: "🔗 One important step: save your platform links (Instagram, SoundCloud, YouTube, Telegram, Spotify…) to your profile so we can use them in your posts.\nWithout a link you cannot publish.",
+    ARTIST_LINKS_LEGEND: "👤 From profile · ✍️ Manual · ⏭ Skip · 🗂 Version history",
+    ARTIST_LINKS_ADD: "➕ Add link",
+    ARTIST_LINKS_EDIT: "✏️ Edit",
+    ARTIST_LINKS_DEL: "🗑 Delete",
+    ARTIST_LINKS_ASK: "Send your {p} link (e.g. https://…):",
+    ARTIST_LINKS_BAD: "❌ Invalid link. Send a full URL.",
+    ARTIST_LINKS_SAVED: "✅ {p} link saved (version {v}). The previous version stays in the history sheet.",
+    ARTIST_LINKS_DELETED: "🗑 {p} link removed; previous version kept in history.",
+    ARTIST_LINKS_HISTORY: "🗂 {p} history",
+    ARTIST_LINKS_VERSION: "Version {v}: {u}",
+    ARTIST_LINKS_PANEL_NOTE: "For each platform choose: from profile, enter manually, or skip.",
+    ARTIST_LINKS_FROM_PROFILE: "👤 From profile",
+    ARTIST_LINKS_MANUAL: "✍️ Manually",
+    ARTIST_LINKS_SKIP: "⏭ Skip",
+    ARTIST_LINKS_SKIPPED: "⏭ {p} skipped.",
+    ARTIST_LINKS_FROM_PROFILE_DONE: "✅ {p} link taken from your profile.",
+    ARTIST_LINKS_PROFILE_MISSING: "⚠️ No {p} link in your profile; enter it manually or skip.",
+    ARTIST_LINKS_MANUAL_ASK: "Send your {p} link:",
+    ARTIST_LINKS_REQUIRED: "⚠️ You cannot publish without a platform link. Add at least one so it is saved to your profile.",
+    ARTIST_LINKS_SAVE_PROFILE_Q: "Is this {p} link yours? Save it to your profile for support?",
+    ARTIST_LINKS_SAVE_YES: "✅ Yes, save to profile",
+    ARTIST_LINKS_SAVE_NO: "❌ No, only this post",
+    ARTIST_LINKS_SAVED_PROFILE: "✅ Link saved to your profile.",
+    ARTIST_LINKS_USING_PROFILE: "🔗 Profile links: {l}",
+    POST_TEMPLATE_CLASSIC: "Classic", POST_TEMPLATE_STORY: "Cover + story", POST_TEMPLATE_AUDIO_ONLY: "Audio only",
+    POST_TEMPLATE_FULL_TRACK: "Full track", POST_TEMPLATE_VIP: "VIP premium",
+    SUBMIT_CHANNELS_LINE: "📡 Channels: {c}",
     CC_LIST_TITLE: "📢 Your connected channels",
     CC_LIST_EMPTY: "No channel connected yet.\nMake the bot an admin in your channel (full access), then tap «➕ Add channel».",
     CC_ADD_ASK: "📢 Send your channel username or id (like @mychannel or -1001234567890).\nMake sure the bot is already an admin there.",
@@ -1309,6 +1480,8 @@ function setupProject() {
     setSetting_("APP_SECRET", sec);
   }
   ensureMusicDownloadDefaultMigration_();
+  try { getSubscriptionPlans_(); } catch (e) {}
+  try { ensureLegacyDestinationsMigrated_(); } catch (e) {}
   if (!getSetting_("CLAIM_CODE")) setSetting_("CLAIM_CODE", generateClaimCode_());
   styleSheets_();
   SpreadsheetApp.getActive().toast("دیتابیس آماده شد. حالا توکن را ثبت و وب‌اپ را Deploy کن.", "Flora Bot", 8);
@@ -1344,6 +1517,27 @@ function migrateSheetColumns_() {
   try { ensureSheet_(APP.SHEETS.CONNECTED_CHANNELS, HEADERS.ConnectedChannels); } catch (e) {}
   try { ensureSheet_(APP.SHEETS.CC_BANNER, HEADERS.CcBanner); } catch (e) {}
   try { ensureSheet_(APP.SHEETS.CC_POSTS, HEADERS.CcPosts); } catch (e) {}
+  try { ensureSheet_(APP.SHEETS.PUBLISH_CHANNELS, HEADERS.PublishChannels); } catch (e) {}
+  try { ensureSheet_(APP.SHEETS.SUBMISSION_CHANNELS, HEADERS.SubmissionChannels); } catch (e) {}
+  try { ensureSheet_(APP.SHEETS.PLANS, HEADERS.SubscriptionPlans); } catch (e) {}
+  try { ensureSheet_(APP.SHEETS.SUBSCRIPTIONS, HEADERS.Subscriptions); } catch (e) {}
+  try { ensureSheet_(APP.SHEETS.PAYMENT_REQUESTS, HEADERS.PaymentRequests); } catch (e) {}
+  try { ensureSheet_(APP.SHEETS.ARTIST_LINKS, HEADERS.ArtistLinks); } catch (e) {}
+  try { ensureSheet_(APP.SHEETS.ARTIST_LINKS_HISTORY, HEADERS.ArtistLinksHistory); } catch (e) {}
+}
+// ارتقای خودکار شیت برای نصب‌های ۰.۱۲ که فقط اسکریپت را به‌روز می‌کنند
+function ensureV013Schema_() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty("V013_SCHEMA") === "1") return;
+    [["PUBLISH_CHANNELS", HEADERS.PublishChannels], ["SUBMISSION_CHANNELS", HEADERS.SubmissionChannels],
+     ["PLANS", HEADERS.SubscriptionPlans], ["SUBSCRIPTIONS", HEADERS.Subscriptions],
+     ["PAYMENT_REQUESTS", HEADERS.PaymentRequests], ["ARTIST_LINKS", HEADERS.ArtistLinks],
+     ["ARTIST_LINKS_HISTORY", HEADERS.ArtistLinksHistory]].forEach(function(pair) {
+      ensureSheet_(APP.SHEETS[pair[0]], pair[1]);
+    });
+    props.setProperty("V013_SCHEMA", "1");
+  } catch (e) { console.warn("ensureV013Schema_: " + (e && e.message || e)); }
 }
 
 function styleSheets_() {
@@ -1795,7 +1989,15 @@ function deleteUserCascade_(userId, options) {
   deleteRowsByKey_(APP.SHEETS.DRAFT_MEDIA, 1, draftIds);
   deleteRowsByKey_(APP.SHEETS.MEDIA, 1, draftIds); // سازگاری با نسخه‌های قدیمی‌تر که پیش‌نویس را اینجا می‌نوشتند
   deleteRowsByKey_(APP.SHEETS.MUSIC_LIBRARY, 2, subIds);
+  try { deleteRowsByKey_(APP.SHEETS.SUBMISSION_CHANNELS, 1, subIds); } catch (e) {}
   if (opts.removeSubmissions !== false) deleteRowsByKey_(APP.SHEETS.SUBMISSIONS, 1, subIds);
+  try {
+    deleteRowsByKey_(APP.SHEETS.ARTIST_LINKS, 1, [uid]);
+    deleteRowsByKey_(APP.SHEETS.ARTIST_LINKS_HISTORY, 1, [uid]);
+    deleteRowsByKey_(APP.SHEETS.SUBSCRIPTIONS, 2, [uid]);
+    deleteRowsByKey_(APP.SHEETS.PAYMENT_REQUESTS, 2, [uid]);
+    bustArtistLinksCache_(); bustSubscriptionsCache_(); bustPaymentRequestsCache_();
+  } catch (e) { logError_("deleteUserCascade_:vip", e, { userId: uid }); }
   deleteRowsByKey_(APP.SHEETS.DRAFTS, 1, draftIds);
   deleteRowsByKey_(APP.SHEETS.SUPPORT, 2, [uid]);
   deleteRowsByKey_(APP.SHEETS.STARTS, 1, [uid]);
@@ -2003,6 +2205,8 @@ function adminPermissionForCallback_(data) {
   if (d === "a:channel" || d === "a:comments" || d === "a:postbuttons" || d === "a:covertest" || d === "set:channel" || d === "set:footer" || d === "set:mode" || d.indexOf("set:mode:") === 0 || d === "set:interval" || d === "set:pubtoggle") return "channel";
   if (d === "a:settings" || d === "a:texts" || d.indexOf("set:") === 0 || d === "a:colors" || d.indexOf("color:") === 0 || d === "a:fj" || d.indexOf("fj:") === 0 || d === "a:inactive" || d.indexOf("set:inactive-") === 0 || d === "a:botmode" || d.indexOf("botmode:") === 0) return "settings";
   if (d === "a:broadcast" || d === "a:campaigns" || d.indexOf("bc:") === 0 || d.indexOf("acc:") === 0 || d.indexOf("bn:") === 0 || d.indexOf("ccp:") === 0) return "broadcast";
+  if (d.indexOf("vipx:") === 0) return "settings";
+  if (d.indexOf("pch:") === 0) return "channel";
   return "settings";
 }
 function adminPermissionForState_(state, stateData) {
@@ -2017,6 +2221,8 @@ function adminPermissionForState_(state, stateData) {
   // دلیل رد بخشی از گردش کار ارسال‌هاست؛ نقش publisher هم باید بتواند رد کند.
   if (s === "ADM_REJECT_REASON") return "submissions";
   if (s === "ADM_CC_LIST" || s === "ADM_CC_MSG" || s === "ADM_CC_SEND_ONE" || s === "ADM_CC_CONFIRM" || s === "ADM_CC_BANNER" || s === "ADM_CC_BANNER_PICK" || s === "ADM_CC_POST_EDIT") return "broadcast";
+  if (/^ADM_VIP_/.test(s)) return "settings";
+  if (/^ADM_PCH_/.test(s)) return "channel";
   if (s === "ADM_BROADCAST_CODE") return "broadcast";
   if (s === "ADM_DIRECT_MSG") return "users";
   if (/^ADM_(CHANNEL_|PUBLISH_INTERVAL)/.test(s)) return "channel";
@@ -2362,7 +2568,8 @@ function userKeyboard_(uid) {
     [{ text: tr_("BTN_SEND_MUSIC", null, lang) }, { text: tr_("BTN_SEND_ALBUM", null, lang) }],
     [{ text: tr_("BTN_FREESTYLE", null, lang) }, { text: tr_("BTN_COMING_SOON", null, lang) }],
     [{ text: tr_("BTN_MY_WORKS", null, lang) }, { text: tr_("BTN_MY_STATS", null, lang) }],
-    [{ text: tr_("BTN_MY_CHANNELS", null, lang) }, { text: tr_("BTN_PROFILE", null, lang) }],
+    [{ text: tr_("BTN_MY_CHANNELS", null, lang) }, { text: tr_("BTN_MY_LINKS", null, lang) }],
+    [{ text: tr_("BTN_VIP", null, lang) }, { text: tr_("BTN_PROFILE", null, lang) }],
     [{ text: tr_("BTN_SUPPORT", null, lang) }, { text: tr_("BTN_LOGOUT", null, lang) }]
   ], resize_keyboard: true, is_persistent: true };
 }
@@ -2379,6 +2586,7 @@ function adminKeyboard_() {
     [{ text: "🛡 دسترسی مدیران" }, { text: "💬 پشتیبانی" }],
     [{ text: "📣 پیام همگانی" }, { text: "😴 غیرفعال‌ها" }],
     [{ text: "⚙️ تنظیمات" }, { text: "📺 کانال" }],
+    [{ text: "📡 کانال‌ها و قالب‌ها" }, { text: "💎 اشتراک‌ها" }],
     [{ text: "🎨 دکمه‌ها و رنگ‌ها" }, { text: "🆘 درخواست‌های رمز" }],
     [{ text: "🌐 عضویت اجباری" }, { text: "📊 آمار" }],
     [{ text: "🧹 نگهداری و بکاپ" }, { text: "📚 آثار من" }],
@@ -2402,15 +2610,26 @@ function userMenuText_(uid) {
       if (subIds[t.submissionId]) totalDl += (Number(t.downloadCount) || 0);
     });
   } catch (e) {}
+  let vipLine = "";
+  let linkLine = "";
+  try {
+    const info = vipInfoFor_(uid);
+    if (info.active) vipLine = (lang === "en" ? "💎 " + ((info.plan && info.plan.name) || "VIP") + " · " + info.used + "/" + info.quota + " tracks · until " + formatDate_(info.sub.expiresAt) : "💎 اشتراک " + ((info.plan && info.plan.name) || "VIP") + " · " + info.used + "/" + info.quota + " ترک · تا " + formatDate_(info.sub.expiresAt));
+    const links = getArtistLinks_(uid);
+    if (!links.length) linkLine = lang === "en" ? "🔗 Add your platform links from «My links»." : "🔗 لینک پلتفرم‌هایت را از «🔗 لینک‌های من» اضافه کن.";
+  } catch (e) {}
+  const extra = [vipLine, linkLine].filter(Boolean).join("\n");
   if (lang === "en") {
     return "🎵 FLORA MUSIC · RELEASE SYSTEM\n" +
       "🟢 ONLINE · Welcome, «" + artistName + "» 👋\n" +
-      "💿 Published: " + pubCount + " · ⏳ Queued/Review: " + queueCount + " · ⬇️ Downloads: " + totalDl + "\n\n" +
+      "💿 Published: " + pubCount + " · ⏳ Queued/Review: " + queueCount + " · ⬇️ Downloads: " + totalDl + "\n" +
+      (extra ? extra + "\n" : "") + "\n" +
       tr_("MENU_TITLE", null, lang) + "\n\n" + tr_("USER_MENU_HINT", null, lang);
   }
   return "🎵 FLORA MUSIC · سیستم انتشار موسیقی\n" +
     "🟢 ONLINE · خوش آمدی، «" + artistName + "» 👋\n" +
-    "💿 منتشرشده: " + pubCount + " · ⏳ در صف/بررسی: " + queueCount + " · ⬇️ دانلود کل: " + totalDl + "\n\n" +
+    "💿 منتشرشده: " + pubCount + " · ⏳ در صف/بررسی: " + queueCount + " · ⬇️ دانلود کل: " + totalDl + "\n" +
+    (extra ? extra + "\n" : "") + "\n" +
     tr_("MENU_TITLE", null, lang) + "\n\n" + tr_("USER_MENU_HINT", null, lang);
 }
 function sendEntryCard_(chatId, prefix) {
@@ -2421,6 +2640,21 @@ function sendEntryCard_(chatId, prefix) {
 function showUserMenu_(chatId, prefix) {
   const uid = String(chatId);
   sendMessage_(chatId, (prefix ? prefix + "\n\n" : "") + userMenuText_(uid), userKeyboard_(uid));
+  try { maybePromptArtistLinks_(chatId, uid); } catch (e) {}
+}
+// برای هر هنرمند (تازه‌وارد یا قدیمی) یک‌بار درخواست ثبت لینک‌های پلتفرم می‌شود.
+function maybePromptArtistLinks_(chatId, uid) {
+  if (String(getSetting_("REQUIRE_ARTIST_LINK") || "true") !== "true") return;
+  if (isAdmin_(uid)) return;
+  if (!getUserById_(uid)) return;
+  if (getArtistLinks_(uid).length) return;
+  const props = PropertiesService.getScriptProperties();
+  const key = "LINK_ASK_" + String(uid);
+  if (props.getProperty(key) === "1") return;
+  props.setProperty(key, "1");
+  sendMessage_(chatId, t_(uid, "ARTIST_LINKS_ONBOARD"), {
+    inline_keyboard: [[{ text: t_(uid, "BTN_MY_LINKS"), callback_data: "lnk:panel" }]]
+  });
 }
 function showClaimCode() {
   const code = getSetting_("CLAIM_CODE");
@@ -2464,6 +2698,7 @@ function doPost(e) {
   resetRuntimeCaches_();
   const startedAt = nowMs_();
   try { ensureMusicDownloadDefaultMigration_(); } catch (migrationError) { console.error("Music download default migration: " + migrationError); }
+  try { ensureV013Schema_(); } catch (schemaError) { console.error("Schema 0.13: " + schemaError); }
   try {
     if (!e || !e.postData || !e.postData.contents) return HtmlService.createHtmlOutput("OK");
     if (e.parameter && e.parameter.ws) {
@@ -2647,6 +2882,11 @@ function handleMessage_(message) {
     if (!loggedIn) { clearSession_("M:" + uid); sendEntryCard_(chatId, t_(uid, "LOGIN_NEEDED")); return; }
     handleProfileState_(message, session); return;
   }
+  if (session && session.state === "VIP_PAY_REF") {
+    if (!loggedIn) { clearSession_("M:" + uid); sendEntryCard_(chatId, t_(uid, "LOGIN_NEEDED")); return; }
+    if (u.blocked || !u.active) { sendMessage_(chatId, t_(uid, u.blocked ? "ACCOUNT_BLOCKED" : "ACCOUNT_INACTIVE")); return; }
+    handleVipPaymentInput_(message, session); return;
+  }
   if (session && String(session.state).indexOf("MUSIC_") === 0) {
     if (!loggedIn) { cancelMusicDraft_(uid, session); sendEntryCard_(chatId, t_(uid, "LOGIN_NEEDED")); return; }
     if (u.blocked || !u.active) { sendMessage_(chatId, t_(uid, u.blocked ? "ACCOUNT_BLOCKED" : "ACCOUNT_INACTIVE")); return; }
@@ -2675,7 +2915,8 @@ function isAdminMenuButtonText_(text) {
     "📢 کانال‌های وصل‌شده", "🖼 بنر تبلیغاتی", "📣 پیام همگانی", "📣 ارسال همگانی", "💬 پشتیبانی",
     "📺 کانال", "📝 متن‌ها", "⚙️ تنظیمات", "🎨 دکمه‌ها و رنگ‌ها",
     "🌐 عضویت اجباری", "🔐 عضویت اجباری", "😴 غیرفعال‌ها", "🆘 درخواست‌های رمز", "🔑 رمزهای فراموش‌شده",
-    "🛡 دسترسی مدیران", "👮 مدیران", "🚦 وضعیت ربات", "📊 آمار", "🧹 نگهداری و بکاپ", "📚 آثار من"
+    "🛡 دسترسی مدیران", "👮 مدیران", "🚦 وضعیت ربات", "📊 آمار", "🧹 نگهداری و بکاپ", "📚 آثار من",
+    "📡 کانال‌ها و قالب‌ها", "💎 اشتراک‌ها"
   ].indexOf(t) >= 0;
 }
 function isUserMenuButtonText_(text) {
@@ -2689,6 +2930,8 @@ function isUserMenuButtonText_(text) {
     tr_("BTN_MY_WORKS", null, "fa"), MSG.en.BTN_MY_WORKS,
     tr_("BTN_MY_STATS", null, "fa"), MSG.en.BTN_MY_STATS, "📊 آمار آثار", "📊 My stats",
     tr_("BTN_MY_CHANNELS", null, "fa"), MSG.en.BTN_MY_CHANNELS,
+    tr_("BTN_MY_LINKS", null, "fa"), MSG.en.BTN_MY_LINKS, "🔗 لینک‌های من",
+    tr_("BTN_VIP", null, "fa"), MSG.en.BTN_VIP, "💎 اشتراک VIP",
     tr_("BTN_PROFILE", null, "fa"), MSG.en.BTN_PROFILE,
     tr_("BTN_SUPPORT", null, "fa"), MSG.en.BTN_SUPPORT, "📞 پشتیبانی",
     tr_("BTN_LOGOUT", null, "fa"), MSG.en.BTN_LOGOUT
@@ -2733,9 +2976,11 @@ function dispatchCallbackQuery_(cb, uid, data, chatId) {
   if (data.indexOf("myc:") === 0) { handleMyChannelsCallback_(cb); return; }
   if (data.indexOf("w:") === 0) { handleWorksCallback_(cb); return; }
   if (data.indexOf("p:") === 0) { handleProfileCallback_(cb); return; }
+  if (data.indexOf("lnk:") === 0) { handleArtistLinksCallback_(cb); return; }
+  if (data.indexOf("vip:") === 0) { handleVipUserCallback_(cb); return; }
   if (data.indexOf("sdel:") === 0) { handleAccountDeleteCallback_(cb); return; }
   // توجه: «cb:» هم باید اینجا باشد، وگرنه دکمه‌های تنظیمات پست به هندلر مدیر نمی‌رسند.
-  if (/^(a|u|sub|set|fj|color|botmode|bc|r|support|cb|acc|bn|ccp):/.test(data)) {
+  if (/^(a|u|sub|set|fj|color|botmode|bc|r|support|cb|acc|bn|ccp|vipx|pch):/.test(data)) {
     if (!isAdmin_(uid)) { answerCallbackQuery_(cb.id, t_(uid, "NO_ACCESS_BTN")); return; }
     if (!isAdminAuthenticated_(uid)) { answerCallbackQuery_(cb.id, t_(uid, "ADMIN_AUTH_NEEDED")); requireAdminAuthentication_(chatId, uid); return; }
     if (isAdminSessionStale_(uid)) { logoutUser_(uid); answerCallbackQuery_(cb.id, t_(uid, "ADMIN_SESSION_EXPIRED")); requireAdminAuthentication_(chatId, uid, t_(uid, "ADMIN_SESSION_EXPIRED")); return; }
@@ -3681,6 +3926,8 @@ function handleUserMenuMessage_(message, user) {
                 text === tr_("BTN_COMING_SOON", null, "fa") || text === MSG.en.BTN_COMING_SOON ||
                 text === tr_("BTN_FREESTYLE", null, "fa") || text === MSG.en.BTN_FREESTYLE || text === "🎤 فری‌استایل")) { showConnectedGate_(chatId, uid); return; }
   if (gated && (text === tr_("BTN_MY_WORKS", null, "fa") || text === MSG.en.BTN_MY_WORKS)) { showConnectedGate_(chatId, uid); return; }
+  if (text === tr_("BTN_MY_LINKS", null, "fa") || text === MSG.en.BTN_MY_LINKS || text === "🔗 لینک‌های من") { showArtistLinksPanel_(chatId, uid); return; }
+  if (text === tr_("BTN_VIP", null, "fa") || text === MSG.en.BTN_VIP || text === "💎 اشتراک VIP") { showVipPanel_(chatId, uid); return; }
   if (text === tr_("BTN_MY_CHANNELS", null, "fa") || text === MSG.en.BTN_MY_CHANNELS) { showMyChannels_(chatId, uid); return; }
   if (text === tr_("BTN_MY_STATS", null, "fa") || text === MSG.en.BTN_MY_STATS || text === "📊 آمار آثار" || text === "📊 My stats") { showArtistStatsForUser_(chatId, uid); return; }
   if (text === tr_("BTN_SEND_MUSIC", null, "fa") || text === MSG.en.BTN_SEND_MUSIC) { startMusicFlow_(chatId, uid, "simple"); return; }
@@ -3820,6 +4067,7 @@ function showProfile_(chatId, uid, user, editMsgId) {
   const rows = [
     [{ text: t_(uid, "PROFILE_EDIT_NAME"), callback_data: "p:name" }, { text: t_(uid, "PROFILE_EDIT_LOC"), callback_data: "p:loc" }],
     [{ text: t_(uid, "PROFILE_CHANGE_PW"), callback_data: "p:pw" }, { text: t_(uid, "PROFILE_LANG"), callback_data: "p:lang" }],
+    [{ text: t_(uid, "BTN_MY_LINKS"), callback_data: "p:links" }, { text: t_(uid, "BTN_VIP"), callback_data: "p:vip" }],
     [{ text: t_(uid, "PROFILE_2FA") + (isGateEnabled_(u) ? " ✅" : ""), callback_data: "mfa:ask" }, { text: t_(uid, "PROFILE_DELETE"), callback_data: "p:del" }],
     [{ text: "📊 آمار آثار من", callback_data: "w:stats" }]
   ];
@@ -3834,6 +4082,8 @@ function handleProfileCallback_(cb) {
   if (action === "home") { answerCallbackQuery_(cb.id); showProfile_(chatId, uid, u, msgId); return; }
   if (action === "cancel") { clearSession_("M:" + uid); answerCallbackQuery_(cb.id, t_(uid, "CANCEL_DONE")); showProfile_(chatId, uid, u, msgId); return; }
   if (action === "lang") { answerCallbackQuery_(cb.id); showLanguagePicker_(chatId, uid); return; }
+  if (action === "links") { answerCallbackQuery_(cb.id); showArtistLinksPanel_(chatId, uid, msgId); return; }
+  if (action === "vip") { answerCallbackQuery_(cb.id); showVipPanel_(chatId, uid); return; }
   if (action === "name") { setSession_("M:" + uid, "PERS_EDIT_NAME", {}); answerCallbackQuery_(cb.id); sendMessage_(chatId, t_(uid, "EDIT_NAME_PROMPT"), cancelKeyboard_()); return; }
   if (action === "loc") { setSession_("M:" + uid, "PERS_EDIT_CITY", {}); answerCallbackQuery_(cb.id); showActiveCityMenu_(chatId, uid); return; }
   if (action === "prov") {
@@ -3892,6 +4142,17 @@ function handleProfileState_(message, session) {
     clearSession_("M:" + uid);
     sendMessage_(chatId, t_(uid, "EDIT_NAME_OK", { n: ((firstName + " " + lastName).trim()), r: rapName }));
     showProfile_(chatId, uid, getUserById_(uid)); return;
+  }
+  if (state === "PERS_LINK_URL") {
+    const platform = String((session.data || {}).platform || "");
+    const meta = platformMeta_(platform);
+    if (isCancelText_(text)) { clearSession_("M:" + uid); showArtistLinksPanel_(chatId, uid); return; }
+    const saved = saveArtistLink_(uid, platform, text, "profile", "profile_edit");
+    if (!saved.ok) { sendMessage_(chatId, t_(uid, "ARTIST_LINKS_BAD"), cancelKeyboard_()); return; }
+    clearSession_("M:" + uid);
+    sendMessage_(chatId, t_(uid, "ARTIST_LINKS_SAVED", { p: meta.label, v: saved.version }));
+    showArtistLinksPanel_(chatId, uid);
+    return;
   }
   if (state === "PERS_EDIT_CITY_FREE") {
     if (text.length < 2 || text.length > 60) { sendMessage_(chatId, t_(uid, "ASK_CITY_FREE"), cancelKeyboard_()); return; }
@@ -4554,6 +4815,16 @@ function startMusicFlow_(chatId, uid, mode) {
   const dailyLimit = Number(getSetting_("MAX_SUBMISSIONS_PER_DAY") || 5);
   if (recent >= Math.max(1, dailyLimit) && !isAdmin_(uid)) { sendMessage_(chatId, t_(uid, "DAILY_LIMIT", { n: dailyLimit })); return; }
   if (!rateAllow_("submit:" + uid, getSetting_("RATE_SUBMITS_PER_HOUR") || 6, 3600) && !isAdmin_(uid)) { sendMessage_(chatId, t_(uid, "RATE_LIMITED")); return; }
+  // پیش از شروع، دسترسی انتشار را بررسی کن: یا کانال رایگان باشد، یا اشتراک فعال با سهمیهٔ باقی‌مانده.
+  const pubChannels = activePublishChannels_();
+  if (!pubChannels.length) { sendMessage_(chatId, t_(uid, "CHANNEL_NONE_AVAILABLE")); return; }
+  const eligible = eligibleChannelsForUser_(uid);
+  if (!eligible.length) {
+    const info = vipInfoFor_(uid);
+    const reason = info.active && info.quota > 0 && info.used >= info.quota ? t_(uid, "VIP_QUOTA_END", { q: info.quota }) : t_(uid, "VIP_REQUIRED");
+    sendMessage_(chatId, reason + "\n\n" + t_(uid, "VIP_PANEL_TITLE"), { inline_keyboard: [[{ text: t_(uid, "BTN_VIP"), callback_data: "vip:panel" }]] });
+    return;
+  }
   const draft = { draftId: newId_("D"), userId: uid, mode: mode, data: { mode: mode, links: [], platformVisible: {}, credits: [], details: {} }, status: "open", createdAt: new Date() };
   withLock_(function() { saveMusicDraft_(draft); });
   setSession_("M:" + uid, "MUSIC_COVER", { draftId: draft.draftId });
@@ -4622,9 +4893,15 @@ function normalizeMusicStep_(step) {
   return s;
 }
 function musicStepsForMode_(mode) {
-  if (String(mode) === "coming_soon") return MUSIC_STEPS_.filter(function(x) { return x !== "MUSIC_AUDIO"; });
+  let list;
+  if (String(mode) === "coming_soon") list = MUSIC_STEPS_.filter(function(x) { return x !== "MUSIC_AUDIO"; });
   // فری‌استایل همان مراحل تک‌آهنگ را دارد؛ فقط در مرحلهٔ رسانه، ویدیو مسیج/ویدیو هم پذیرفته می‌شود.
-  return MUSIC_STEPS_.slice();
+  else list = MUSIC_STEPS_.slice();
+  // انتخاب کانال فقط وقتی معنا دارد که چند کانال فعال باشد و مدیر انتخاب را به هنرمند سپرده باشد.
+  if (channelSelectionStepEnabled_() && channelSelectionMode_() === "user" && list.indexOf("MUSIC_CHANNELS") < 0) {
+    list.splice(Math.max(0, list.indexOf("MUSIC_LINKS")), 0, "MUSIC_CHANNELS");
+  }
+  return list;
 }
 // ───────────────────────── ژانر (هشتگ متغیر هر پست) ─────────────────────────
 // قالب تنظیمات MUSIC_GENRES: «برچسب دکمه=هشتگ» با جداکنندهٔ کاما؛ بدون «=» خودِ برچسب هشتگ می‌شود.
@@ -4737,7 +5014,7 @@ function musicStepKeyboard_(uid, step, mode) {
   else if (st === "MUSIC_TITLE") rows.push([{ text: tr_("BTN_NEXT", null, lang) }]);
   else rows.push([{ text: tr_("BTN_NEXT", null, lang) }]);
   // در ردیفِ آخر (که «➡️ مرحلهٔ بعد» دارد) دکمهٔ رد کردن می‌نشیند تا چیدمان ژانرها به هم نریزد.
-  if (["MUSIC_FEAT", "MUSIC_CREDITS", "MUSIC_GENRE", "MUSIC_LINKS"].indexOf(st) >= 0) {
+  if (["MUSIC_FEAT", "MUSIC_CREDITS", "MUSIC_GENRE", "MUSIC_LINKS", "MUSIC_CHANNELS"].indexOf(st) >= 0) {
     const last = rows[rows.length - 1];
     if (last && last.length && String(last[0].text) === tr_("BTN_NEXT", null, lang)) last.unshift({ text: tr_("BTN_SKIP", null, lang) });
     else rows[0].unshift({ text: tr_("BTN_SKIP", null, lang) });
@@ -4817,7 +5094,19 @@ function stepPrompt_(uid, draft, step) {
     return prog + tr_("GENRE_ASK", { n: maxGenreTags_() }, lang)
       + (chosen ? "\n\n" + (lang === "en" ? "Selected: " : "انتخاب‌شده: ") + chosen : "");
   }
-  if (step === "MUSIC_LINKS") return prog + t_(uid, "LINK_PROMPT");
+  if (step === "MUSIC_CHANNELS") {
+    const all = activePublishChannels_();
+    const lines = [prog + t_(uid, "CHANNEL_PICK_TITLE"), t_(uid, "CHANNEL_PICK_NOTE"), ""];
+    all.forEach(function(c) {
+      const ok = canUserPublishToChannel_(uid, c).ok;
+      lines.push((ok ? "✅" : "🔒") + " " + c.title + (c.access === "free" ? t_(uid, "CHANNEL_FREE_SUFFIX") : " · " + channelAccessLabel_(c)));
+    });
+    return lines.join("\n");
+  }
+  if (step === "MUSIC_LINKS") {
+    const profile = artistLinksListText_(uid);
+    return prog + t_(uid, "LINK_PROMPT") + "\n\n" + t_(uid, "ARTIST_LINKS_PANEL_NOTE") + (profile ? "\n\n" + t_(uid, "ARTIST_LINKS_USING_PROFILE", { l: "\n" + profile }) : "");
+  }
   if (step === "MUSIC_PREVIEW") return prog + t_(uid, "PREVIEW_TITLE") + buildDraftPreviewCaption_(draft) + t_(uid, "PREVIEW_HINT");
   return "";
 }
@@ -4839,6 +5128,7 @@ function stepLabel_(uid, step) {
     MUSIC_GENRE: en ? "Genre" : "ژانر",
     MUSIC_TITLE: en ? "Track name" : "عنوان",
     MUSIC_LINKS: en ? "Links" : "لینک‌ها",
+    MUSIC_CHANNELS: en ? "Channels" : "کانال‌های انتشار",
     MUSIC_PREVIEW: en ? "Preview" : "پیش‌نمایش"
   };
   return labels[st] || st;
@@ -4848,7 +5138,7 @@ function stepAcceptLabel_(uid, step) {
   const en = userLang_(uid) === "en";
   if (st === "MUSIC_COVER") return en ? "photo or video" : "عکس یا ویدیو";
   if (st === "MUSIC_AUDIO") return en ? "an MP3 file" : "فایل MP3";
-  if (["MUSIC_ARTISTS", "MUSIC_FEAT", "MUSIC_CREDITS", "MUSIC_GENRE", "MUSIC_TITLE", "MUSIC_LINKS"].indexOf(st) >= 0) return en ? "text" : "متن";
+  if (["MUSIC_ARTISTS", "MUSIC_FEAT", "MUSIC_CREDITS", "MUSIC_GENRE", "MUSIC_TITLE", "MUSIC_LINKS", "MUSIC_CHANNELS"].indexOf(st) >= 0) return en ? "text" : "متن";
   return en ? "text" : "متن";
 }
 function validateCoverStep_(chatId, uid, draft) {
@@ -4882,6 +5172,10 @@ function advanceMusicStep_(chatId, uid, draft, session, force) {
   if (step === "MUSIC_COVER" && !validateCoverStep_(chatId, uid, draft)) return;
   if (step === "MUSIC_AUDIO" && !validateAudioStep_(chatId, uid, draft)) return;
   let target = force || nextStep_(step, draft.mode);
+  if (step === "MUSIC_CHANNELS" && (!Array.isArray(draft.data.channels) || !draft.data.channels.length)) {
+    sendDraftChannelPicker_(chatId, uid, draft);
+    return;
+  }
   // عنوان و هنرمند نباید خالی رد شوند — وگرنه در پایان «عنوان وارد کن» تکرار می‌شود
   if (step === "MUSIC_TITLE" && !String(draft.data.title || "").trim()) {
     sendMessage_(chatId, t_(uid, "SUBMIT_TITLE_ASK"), musicStepKeyboard_(uid, "MUSIC_TITLE", draft.mode));
@@ -4899,17 +5193,27 @@ function advanceMusicStep_(chatId, uid, draft, session, force) {
   setSession_("M:" + uid, target, { draftId: draft.draftId });
   // پیام پیش‌نمایش شامل <blockquote> و <a> است؛ بدون parse_mode تگ‌ها خام دیده می‌شدند.
   const html = target === "MUSIC_PREVIEW" ? { parse_mode: "HTML" } : null;
-  sendMessage_(chatId, stepPrompt_(uid, draft, target), musicStepKeyboard_(uid, target, draft.mode), html);
+  // مرحله‌های کانال/لینک پنل اختصاصی دارند؛ پیام متنی جداگانه تکرار نشود.
+  if (target !== "MUSIC_CHANNELS" && target !== "MUSIC_LINKS") {
+    sendMessage_(chatId, stepPrompt_(uid, draft, target), musicStepKeyboard_(uid, target, draft.mode), html);
+  }
+  // پنل‌های شیشه‌ای مرحله: انتخاب کانال و انتخاب منبع لینک هر پلتفرم
+  try {
+    if (target === "MUSIC_CHANNELS") sendDraftChannelPicker_(chatId, uid, draft);
+    if (target === "MUSIC_LINKS") showDraftLinksPanel_(chatId, uid, draft);
+  } catch (e) { logError_("advanceMusicStep_:panel", e, { draftId: draft && draft.draftId }); }
 }
 function handleMusicMessage_(message, session) {
   const uid = String(message.from.id); const chatId = String(message.chat.id); const text = String(message.text || "").trim();
   const draftId = (session.data || {}).draftId; const draft = getMusicDraft_(draftId);
   if (!draft || draft.status !== "open") { clearSession_("M:" + uid); showUserMenu_(chatId, t_(uid, "DRAFT_NOT_FOUND")); return; }
+  if (String(session.state) === "MUSIC_LINK_MANUAL") { handleManualArtistLinkInput_(message, session, draft); return; }
   const lang = userLang_(uid);
   const isFinish = text === "✅ پایان ارسال" || text === MSG.en.BTN_FINISH || text === "✅ پایان" || text === MSG.en.BTN_END;
   const isNext = text === "➡️ مرحلهٔ بعد" || text === MSG.en.BTN_NEXT;
   const isSkip = text === "⏭ رد کردن" || text === MSG.en.BTN_SKIP;
   const isPrev = text === "⬅️ مرحلهٔ قبل" || text === tr_("BTN_PREV_STEP", null, lang) || text === MSG.en.BTN_PREV_STEP;
+  if (String(session.state) === "MUSIC_CHANNELS" && !isFinish && !isNext && !isSkip && !isPrev) { sendDraftChannelPicker_(chatId, uid, draft); return; }
   const state = normalizeMusicStep_(session.state || "MUSIC_COVER");
 
   if (isPrev) {
@@ -4920,7 +5224,7 @@ function handleMusicMessage_(message, session) {
     return;
   }
   if (isFinish || isNext || isSkip) {
-    if (isSkip && ["MUSIC_FEAT", "MUSIC_CREDITS", "MUSIC_GENRE", "MUSIC_LINKS"].indexOf(state) < 0) {
+    if (isSkip && ["MUSIC_FEAT", "MUSIC_CREDITS", "MUSIC_GENRE", "MUSIC_LINKS", "MUSIC_CHANNELS"].indexOf(state) < 0) {
       // پیش‌نمایش HTML است؛ اگر parse_mode نگذاریم تگ‌های <blockquote> عیناً به کاربر نشان داده می‌شود.
       const opts = state === "MUSIC_PREVIEW" ? { parse_mode: "HTML" } : undefined;
       sendMessage_(chatId, stepPrompt_(uid, draft, state), musicStepKeyboard_(uid, state), opts); return;
@@ -4958,7 +5262,7 @@ function handleMusicMessage_(message, session) {
   }
   // اگر کاربر وسط پیش‌نویس دکمهٔ منو را بزند، اگر پیش‌نویس هنوز خالی است خودکار لغو و به منو می‌رود؛
   // وگرنه کیبورد مرحله (همراه با دکمهٔ لغو) دوباره نمایش داده می‌شود.
-  const menuButtonTexts = ["🎵 ارسال موزیک", "🎼 ارسال آلبوم", "⏳ Coming Soon", "🎤 فری‌استایل", MSG.en.BTN_FREESTYLE, "📚 آثار من", "🎼 آثار من", "📊 آمار آثار", MSG.en.BTN_MY_STATS, "📢 کانال‌های من", MSG.fa.BTN_MY_CHANNELS, MSG.en.BTN_MY_CHANNELS, "📞 پشتیبانی", "👤 پروفایل", "🚪 خروج", "🟡 ثبت‌نام / ورود", "🆘 فراموشی رمز", MSG.en.BTN_SEND_MUSIC, MSG.en.BTN_SEND_ALBUM, MSG.en.BTN_MY_WORKS, MSG.en.BTN_PROFILE, MSG.en.BTN_LOGOUT, MSG.en.BTN_SUPPORT, "🎵 ارسال‌ها", "⚙️ تنظیمات"];
+  const menuButtonTexts = ["🎵 ارسال موزیک", "🎼 ارسال آلبوم", "⏳ Coming Soon", "🎤 فری‌استایل", MSG.en.BTN_FREESTYLE, "📚 آثار من", "🎼 آثار من", "📊 آمار آثار", MSG.en.BTN_MY_STATS, "📢 کانال‌های من", MSG.fa.BTN_MY_CHANNELS, MSG.en.BTN_MY_CHANNELS, "📞 پشتیبانی", "👤 پروفایل", "🚪 خروج", "🟡 ثبت‌نام / ورود", "🆘 فراموشی رمز", MSG.en.BTN_SEND_MUSIC, MSG.en.BTN_SEND_ALBUM, MSG.en.BTN_MY_WORKS, MSG.en.BTN_PROFILE, MSG.en.BTN_LOGOUT, MSG.en.BTN_SUPPORT, "🎵 ارسال‌ها", "⚙️ تنظیمات", "🔗 لینک‌های من", MSG.fa.BTN_MY_LINKS, MSG.en.BTN_MY_LINKS, "💎 اشتراک VIP", MSG.fa.BTN_VIP, MSG.en.BTN_VIP];
   if (menuButtonTexts.indexOf(text) >= 0) {
     const hasMedia = getDraftMedia_(draft.draftId).length > 0;
     const hasTitle = !!String((draft.data || {}).title || "").trim();
@@ -4982,6 +5286,12 @@ function handleMusicMessage_(message, session) {
   else if (strictState) { /* مراحل عنوان/هنرمند/فیچرینگ توسط بلوک اختصاصی همان مرحله پردازش می‌شوند تا جریان جلو برود */ }
   else if (meta && state !== "MUSIC_LINKS" && state !== "MUSIC_PREVIEW") { applyMetadata_(message, draft, meta); return; }
   if (!text) { sendMessage_(chatId, t_(uid, "FILE_UNSUPPORTED")); return; }
+
+  // اگر کاربر وسط هر مرحله‌ای لینک پلتفرم فرستاد (کپشن/عنوان/عوامل)، همان‌جا ثبت می‌شود
+  // و ربات می‌پرسد «این لینک خودت است؟» تا در پروفایل ذخیره شود.
+  if (state !== "MUSIC_LINKS" && state !== "MUSIC_PREVIEW") {
+    try { captureArtistLinksFromText_(chatId, uid, draft, text); } catch (e) { logError_("captureArtistLinksFromText_", e, { draftId: draft.draftId }); }
+  }
 
   // در مرحلهٔ کاور/موزیک متن پذیرفته نمی‌شود؛ کاربر باید همان رسانهٔ مجاز را بفرستد.
   if (state === "MUSIC_COVER") { sendMessage_(chatId, draft.mode === "coming_soon" ? t_(uid, "STEP_COVER_ONLY_COMING") : t_(uid, "STEP_COVER_ONLY", { n: getMaxCoverPhotos_() }), musicStepKeyboard_(uid, state, draft.mode)); return; }
@@ -5232,21 +5542,104 @@ function handleMusicLinkInput_(chatId, uid, draft, text) {
   const links = parseLinks_(text);
   if (!links.length) { sendMessage_(chatId, t_(uid, "LINK_BAD"), musicStepKeyboard_(uid, "MUSIC_LINKS")); return; }
   if (!draft.data.links) draft.data.links = [];
+  if (!draft.data.artistLinks) draft.data.artistLinks = {};
   let addedCount = 0;
-  links.forEach(function(l) { if (!draft.data.links.some(function(x) { return x.url === l.url; })) { draft.data.links.push(l); addedCount++; } });
+  const newOnes = [];
+  links.forEach(function(l) {
+    if (!draft.data.links.some(function(x) { return x.url === l.url; })) { draft.data.links.push(l); addedCount++; newOnes.push(l); }
+    const platform = l.platform || platformFor_(l.url);
+    if (platform && !draft.data.artistLinks[platform]) draft.data.artistLinks[platform] = { url: l.url, source: "manual" };
+    if (platform) draft.data.linkSkipped = Object.assign({}, draft.data.linkSkipped || {}, (function() { const o = {}; o[platform] = false; return o; })());
+  });
   saveMusicDraft_(draft);
   sendMessage_(chatId, t_(uid, "LINK_ADDED", { n: addedCount, t: draft.data.links.length }));
+  // اگر لینک تازه پیدا شد، بپرس آیا مال خود هنرمند است تا در پروفایل ذخیره شود
+  newOnes.slice(0, 4).forEach(function(l) {
+    const platform = l.platform || platformFor_(l.url);
+    if (!platform) return;
+    const meta = platformMeta_(platform);
+    if (getArtistLink_(uid, platform)) return;
+    sendMessage_(chatId, t_(uid, "ARTIST_LINKS_SAVE_PROFILE_Q", { p: meta.label }) + "\n" + l.url, {
+      inline_keyboard: [[
+        { text: t_(uid, "ARTIST_LINKS_SAVE_YES"), callback_data: "m:alsv:" + draft.draftId + ":" + platform },
+        { text: t_(uid, "ARTIST_LINKS_SAVE_NO"), callback_data: "m:alno:" + draft.draftId + ":" + platform }
+      ]]
+    });
+  });
   showDraftLinksPanel_(chatId, uid, draft);
 }
-function showDraftLinksPanel_(chatId, uid, draft) {
-  const links = draft.data.links || [];
-  const rows = links.map(function(l) {
-    const visible = (draft.data.platformVisible || {})[l.platform] !== false;
-    const meta = platformMeta_(l.platform);
-    return [{ text: (visible ? "👁 " : "🙈 ") + meta.emoji + " " + meta.label + " · " + t_(uid, visible ? "PLATFORM_SHOWN" : "PLATFORM_HIDDEN"), callback_data: "m:lt:" + draft.draftId + ":" + l.platform }];
+function draftArtistLinkMap_(draft) {
+  if (!draft.data.artistLinks || typeof draft.data.artistLinks !== "object") draft.data.artistLinks = {};
+  return draft.data.artistLinks;
+}
+function draftLinkSelected_(draft, platform) {
+  const map = draftArtistLinkMap_(draft);
+  return map[platform] || null;
+}
+// وقتی هنرمند انتخابش را عوض می‌کند (پروفایل/ورود دستی/رد کردن)، لینک قبلی همان پلتفرم
+// باید از لیست لینک‌های پست هم برداشته شود تا لینک اشتباه منتشر نشود.
+function removeDraftPlatformLinks_(draft, platform) {
+  const p = String(platform || "").toLowerCase();
+  const map = draftArtistLinkMap_(draft);
+  delete map[p];
+  draft.data.links = (draft.data.links || []).filter(function(l) {
+    return String(l.platform || platformFor_(l.url) || "").toLowerCase() !== p;
   });
-  rows.push([{ text: t_(uid, "BTN_NEXT"), callback_data: "m:next:" + draft.draftId }]);
-  sendMessage_(chatId, t_(uid, "LINK_PANEL"), { inline_keyboard: rows });
+  const skipped = draft.data.linkSkipped || {};
+  delete skipped[p];
+  draft.data.linkSkipped = skipped;
+}
+function showDraftLinksPanel_(chatId, uid, draft, editMsgId) {
+  const platforms = artistLinkPlatforms_();
+  const map = draftArtistLinkMap_(draft);
+  const skipped = draft.data.linkSkipped || {};
+  const lines = [t_(uid, "ARTIST_LINKS_TITLE") + " — " + t_(uid, "LINK_PANEL"), t_(uid, "ARTIST_LINKS_LEGEND"), ""];
+  const rows = [];
+  platforms.forEach(function(platform) {
+    const meta = platformMeta_(platform);
+    const profile = getArtistLink_(uid, platform);
+    const chosen = map[platform];
+    let status;
+    if (chosen) status = "✅ " + truncate_(chosen.url, 32) + (chosen.source === "profile" ? " · 👤" : " · ✍️");
+    else if (skipped[platform]) status = "⏭ " + t_(uid, "ARTIST_LINKS_SKIP");
+    else status = profile ? "👤 " + truncate_(profile.url, 32) : "—";
+    lines.push(meta.emoji + " " + meta.label + ": " + status);
+    const row = [];
+    if (profile) row.push({ text: meta.emoji + " " + t_(uid, "ARTIST_LINKS_FROM_PROFILE"), callback_data: "m:alp:" + draft.draftId + ":" + platform });
+    row.push({ text: userLang_(uid) === "en" ? "✍️ Manual" : "✍️ دستی", callback_data: "m:alm:" + draft.draftId + ":" + platform });
+    row.push({ text: t_(uid, "ARTIST_LINKS_SKIP"), callback_data: "m:als:" + draft.draftId + ":" + platform });
+    if (getArtistLinkHistory_(uid, platform).length) row.push({ text: "🗂", callback_data: "m:alh:" + draft.draftId + ":" + platform });
+    rows.push(row.length > 3 ? [row[0], row[1], [row[2], row[3]]] : row);
+  });
+  // ردیف‌های تودرتو را صاف کن (تلگرام آرایهٔ تودرتو نمی‌پذیرد)
+  const flat = [];
+  rows.forEach(function(r) { if (Array.isArray(r) && Array.isArray(r[2])) { flat.push([r[0], r[1]]); flat.push(r[2]); } else flat.push(r); });
+  flat.push([{ text: t_(uid, "BTN_NEXT"), callback_data: "m:next:" + draft.draftId }]);
+  const text = lines.join("\n");
+  if (editMsgId) sendOrEditUserPanel_(chatId, editMsgId, text, { inline_keyboard: flat });
+  else sendMessage_(chatId, text, { inline_keyboard: flat });
+}
+// مرحلهٔ انتخاب کانال انتشار (در حالت «هنرمند انتخاب می‌کند»)
+function sendDraftChannelPicker_(chatId, uid, draft, editMsgId) {
+  const all = activePublishChannels_();
+  if (!all.length) { sendMessage_(chatId, t_(uid, "CHANNEL_NONE_AVAILABLE"), musicStepKeyboard_(uid, "MUSIC_CHANNELS", draft.mode)); return; }
+  if (!Array.isArray(draft.data.channels) || !draft.data.channels.length) {
+    draft.data.channels = defaultChannelIdsForUser_(uid).map(function(c) { return c.id; });
+    saveMusicDraft_(draft);
+  }
+  const chosen = draft.data.channels.map(String);
+  const lines = [t_(uid, "CHANNEL_PICK_TITLE"), t_(uid, "CHANNEL_PICK_NOTE")];
+  const rows = all.map(function(c) {
+    const allowed = canUserPublishToChannel_(uid, c).ok;
+    const on = chosen.indexOf(String(c.id)) >= 0;
+    // قالبِ هر کانال رازِ مدیر است و به هنرمند نشان داده نمی‌شود.
+    lines.push((on ? "✅" : allowed ? "⬜️" : "🔒") + " " + c.title + (c.access === "free" ? t_(uid, "CHANNEL_FREE_SUFFIX") : " · " + channelAccessLabel_(c)));
+    return [{ text: (on ? "✅ " : allowed ? "⬜️ " : "🔒 ") + truncate_(c.title, 26), callback_data: "m:ch:" + draft.draftId + ":" + c.id }];
+  });
+  rows.push([{ text: "✅ " + t_(uid, "BTN_NEXT"), callback_data: "m:chok:" + draft.draftId }]);
+  const text = lines.join("\n");
+  if (editMsgId) sendOrEditUserPanel_(chatId, editMsgId, text, { inline_keyboard: rows });
+  else sendMessage_(chatId, text, { inline_keyboard: rows });
 }
 // توجه: در Apps Script V8 کلاس جهانی URL وجود ندارد؛ پس آدرس‌ها با regex پردازش می‌شوند.
 function hostOf_(url) {
@@ -5367,7 +5760,10 @@ function saveMusicSubmission_(draft, meta) {
     const scheduledAt = (meta.scheduledAtValue && !comingSoon) ? new Date(Number(meta.scheduledAtValue)) : computeNextSlot_(getSetting_("PUBLISH_INTERVAL_MIN"));
     const links = (meta.links || []).filter(function(l) { return l && l.url; });
     const status = approvalMode ? "pending" : "approved";
-    sh.appendRow([id, String(draft.userId), draft.mode, meta.title, meta.artists, meta.featuring || "", meta.caption || "", JSON.stringify({ items: links, visible: meta.platformVisible || {} }), status, scheduledAt, now, now, "", "", "", "", JSON.stringify({ mode: draft.mode, details: meta.details || {}, scheduleText: meta.scheduleText || "", scheduledOffset: meta.scheduledOffset == null ? -1 : meta.scheduledOffset }), "", "", ""]);
+    const channelIds = Array.isArray(meta.channels) ? meta.channels.map(function(c) { return String(c.id || c); }) : [];
+    const templateMap = Array.isArray(meta.channels) ? meta.channels.map(function(c) { return String(c.id || c) + ":" + normalizeTemplateKey_(c.template); }).join(",") : "";
+    const linkSnapshot = Array.isArray(meta.linkSnapshot) ? meta.linkSnapshot : [];
+    sh.appendRow([id, String(draft.userId), draft.mode, meta.title, meta.artists, meta.featuring || "", meta.caption || "", JSON.stringify({ items: links, visible: meta.platformVisible || {} }), status, scheduledAt, now, now, "", "", "", "", JSON.stringify({ mode: draft.mode, details: meta.details || {}, scheduleText: meta.scheduleText || "", scheduledOffset: meta.scheduledOffset == null ? -1 : meta.scheduledOffset }), "", "", "", JSON.stringify(channelIds), templateMap, JSON.stringify(linkSnapshot)]);
     const mediaSheet = getSheet_(APP.SHEETS.MEDIA);
     if (draftMedia.length) {
       // یک نوشتن دسته‌ای به‌جای appendRow به‌ازای هر رسانه: قفل کوتاه‌تر نگه داشته می‌شود.
@@ -5396,7 +5792,7 @@ function submissionFromRow_(r, i) {
   let links = { items: [], visible: {} };
   try { const parsed = JSON.parse(r[7] || "{}"); links = { items: Array.isArray(parsed) ? parsed : (parsed.items || []), visible: (parsed && parsed.visible) || {} }; } catch (e) {}
   let request = {}; try { request = JSON.parse(r[16] || "{}"); } catch (e) {}
-  return { rowNumber: i + 2, id: String(r[0] || ""), userId: String(r[1] || ""), mode: String(r[2] || "simple"), title: String(r[3] || ""), artists: String(r[4] || ""), featuring: String(r[5] || ""), caption: String(r[6] || ""), links: links.items, platformVisible: links.visible || {}, status: String(r[8] || "pending"), scheduledAt: r[9] || "", createdAt: r[10] || "", updatedAt: r[11] || "", publishedAt: r[12] || "", visualMessageIds: String(r[13] || ""), audioMessageIds: String(r[14] || ""), publishStage: String(r[15] || ""), request: request || {}, failure: String(r[17] || ""), reviewNote: String(r[18] || ""), reviewedBy: String(r[19] || "") };
+  return { rowNumber: i + 2, id: String(r[0] || ""), userId: String(r[1] || ""), mode: String(r[2] || "simple"), title: String(r[3] || ""), artists: String(r[4] || ""), featuring: String(r[5] || ""), caption: String(r[6] || ""), links: links.items, platformVisible: links.visible || {}, status: String(r[8] || "pending"), scheduledAt: r[9] || "", createdAt: r[10] || "", updatedAt: r[11] || "", publishedAt: r[12] || "", visualMessageIds: String(r[13] || ""), audioMessageIds: String(r[14] || ""), publishStage: String(r[15] || ""), request: request || {}, failure: String(r[17] || ""), reviewNote: String(r[18] || ""), reviewedBy: String(r[19] || ""), channelsJson: String(r[20] || ""), template: String(r[21] || ""), linkSnapshot: String(r[22] || "") };
 }
 function getAllSubmissions_() {
   if (SUBMISSIONS_MEMO_ !== null) return SUBMISSIONS_MEMO_;
@@ -5411,7 +5807,7 @@ function getSubmission_(id) {
   return SUBMISSION_BY_ID_MEMO_[String(id)] || null;
 }
 function setSubmissionField_(id, field, value) {
-  const columns = { title: 4, artists: 5, featuring: 6, caption: 7, links: 8, status: 9, scheduledAt: 10, updatedAt: 12, publishedAt: 13, visualMessageIds: 14, audioMessageIds: 15, publishStage: 16, failure: 18, reviewNote: 19, reviewedBy: 20 };
+  const columns = { title: 4, artists: 5, featuring: 6, caption: 7, links: 8, status: 9, scheduledAt: 10, updatedAt: 12, publishedAt: 13, visualMessageIds: 14, audioMessageIds: 15, publishStage: 16, failure: 18, reviewNote: 19, reviewedBy: 20, channelsJson: 21, template: 22, linkSnapshot: 23 };
   const col = columns[field]; const s = getSubmission_(id); if (!s || !col) return false;
   getSheet_(APP.SHEETS.SUBMISSIONS).getRange(s.rowNumber, col).setValue(value);
   if (field === "title" || field === "artists" || field === "featuring") s[field] = value;
@@ -5447,15 +5843,15 @@ function deleteSubmissionCompletely_(submissionId, options) {
   const channel = normalizeChannelId_(getSetting_("CHANNEL_ID"));
   // حذف پیام‌های کانال I/O شبکهٔ تلگرام است و می‌تواند ثانیه‌ها طول بکشد؛ نباید زیر قفل
   // سراسری انجام شود (قبلاً حذف یک آلبوم قفل را آن‌قدر نگه می‌داشت که بقیهٔ نوشتن‌ها تایم‌اوت می‌شدند).
-  if (opts.deleteChannel !== false && channel) {
-    const ids = positiveIdList_(String(sub.visualMessageIds || "") + "|" + String(sub.audioMessageIds || ""));
-    ids.forEach(function(mid) { deleteMessage_(channel, mid); });
+  if (opts.deleteChannel !== false && (channel || activePublishChannels_().length)) {
+    try { deleteChannelPostMessages_(sub); } catch (e) { logError_("deleteSubmissionChannelPosts_", e, { submissionId: submissionId }); }
   }
   withLock_(function() {
     deleteRowsByKey_(APP.SHEETS.MEDIA, 1, [submissionId]);
     deleteRowsByKey_(APP.SHEETS.CREDITS, 1, [submissionId]);
     deleteRowsByKey_(APP.SHEETS.MUSIC_LIBRARY, 2, [submissionId]);
     deleteRowsByKey_(APP.SHEETS.MUSIC_DOWNLOADS, 4, [submissionId]);
+    try { deleteRowsByKey_(APP.SHEETS.SUBMISSION_CHANNELS, 1, [submissionId]); } catch (e) {}
     getSheet_(APP.SHEETS.SUBMISSIONS).deleteRow(sub.rowNumber);
     bustSubmissionCaches_();
     DRAFT_MEDIA_MEMO_ = null;
@@ -5799,6 +6195,7 @@ function trackLinesFor_(submission) {
 function buildPostCaption_(submission, options) {
   const opts = options || {};
   const sub = submission || {};
+  const destChannel = opts.channel || null;
   const mode = String(sub.mode || "simple");
   const artistEmoji = String(getSetting_("POST_ARTIST_EMOJI") || "🔥");
   const titleEmoji = String(getSetting_("POST_TITLE_EMOJI") || "🖤");
@@ -5847,20 +6244,20 @@ function buildPostCaption_(submission, options) {
   const hashtags = (custom && custom.indexOf("#") >= 0) ? "" : buildPostHashtags_(sub);
   if (hashtags) blocks.push(hashtags);
   if (!opts.compact) {
-    let footer = String(getSetting_("CHANNEL_FOOTER") || "").trim();
+    let footer = String(destChannel && destChannel.footer != null && destChannel.footer !== "" ? destChannel.footer : (getSetting_("CHANNEL_FOOTER") || "")).trim();
     const isPlainTme = /^\s*(\[t\.me\]\(http:\/\/t\.me\)|https?:\/\/t\.me\/?|t\.me)\s*$/i.test(footer);
     if (isPlainTme) footer = "";
     // اگر فوتر خودش دقیقاً همان لینک تلگرام با ایموجی است، تکراری محسوب می‌شود و فقط نسخه خودکار (لینک‌دار) می‌ماند
     const footerHasFullTelegram = /Telegram\s*·\s*@/i.test(footer) && /t\.me/i.test(footer);
     if (footerHasFullTelegram) footer = "";
-    const telegram = getChannelTelegramTarget_();
+    const telegram = destChannel ? channelTelegramTarget_(destChannel) : getChannelTelegramTarget_();
     if (telegram) blocks.push("🔵 " + linkHtml_(telegram.url, telegram.label));
     if (footer) blocks.push(opts.plainFooter ? footer : htmlEscape_(footer));
   }
 
   let caption = blocks.join("\n\n").trim();
   if (caption.length > 1024) {
-    caption = buildPostCaption_(sub, { compact: true, plainTitle: true, plainFooter: true });
+    caption = buildPostCaption_(sub, { compact: true, plainTitle: true, plainFooter: true, channel: destChannel });
     if (caption.length > 1024) {
       caption = caption.slice(0, 1000);
       const cut = caption.lastIndexOf("\n");
@@ -6168,18 +6565,65 @@ function finalizeDraftToSubmission_(chatId, uid, draft) {
     sendMessage_(chatId, t_(uid, duplicate === "file" ? "DUPLICATE_FILE" : "DUPLICATE_TITLE") + "\n" + t_(uid, "DUPLICATE_FIX_HINT"), musicStepKeyboard_(uid, "MUSIC_TITLE", draft.mode));
     return;
   }
+  // ── انتخاب کانال‌های انتشار و کنترل دسترسی (رایگان/VIP) ──
+  const allChannels = activePublishChannels_();
+  if (!allChannels.length) {
+    setSession_("M:" + uid, "MUSIC_PREVIEW", { draftId: draft.draftId });
+    sendMessage_(chatId, t_(uid, "CHANNEL_NONE_AVAILABLE"), musicStepKeyboard_(uid, "MUSIC_PREVIEW", draft.mode));
+    return;
+  }
+  let selectedChannels;
+  if (channelSelectionMode_() === "user" && Array.isArray(data.channels) && data.channels.length) {
+    selectedChannels = allChannels.filter(function(c) { return data.channels.map(String).indexOf(String(c.id)) >= 0; });
+  } else {
+    selectedChannels = defaultChannelIdsForUser_(uid);
+  }
+  const entitlementError = channelEntitlementError_(uid, selectedChannels);
+  if (entitlementError) {
+    if (channelSelectionMode_() === "user") {
+      setSession_("M:" + uid, "MUSIC_CHANNELS", { draftId: draft.draftId });
+      sendMessage_(chatId, entitlementError);
+      sendDraftChannelPicker_(chatId, uid, draft);
+    } else {
+      setSession_("M:" + uid, "MUSIC_PREVIEW", { draftId: draft.draftId });
+      sendMessage_(chatId, entitlementError + "\n\n" + t_(uid, "VIP_PANEL_TITLE"), { inline_keyboard: [[{ text: t_(uid, "BTN_VIP"), callback_data: "vip:panel" }]] });
+    }
+    return;
+  }
+  // در حالت «مدیر تعیین می‌کند» انتخاب کانال در ارسال قفل نمی‌شود؛ هنگام انتشار از
+  // تنظیماتِ همان لحظهٔ مدیر استفاده می‌شود تا کانال تازه‌اضافه‌شده هم پست بگیرد.
+  const explicitChannelIds = channelSelectionMode_() === "user" ? selectedChannels.map(function(c) { return c.id; }) : [];
+  draft.data.channels = selectedChannels.map(function(c) { return c.id; });
+  saveMusicDraft_(draft);
+
+  // ── لینک‌های پلتفرم: از پروفایل + انتخاب/ورود دستی همین ارسال ──
+  const linkSnapshot = snapshotArtistLinksForSubmission_(uid, draft);
+  if (String(getSetting_("REQUIRE_ARTIST_LINK") || "true") === "true" && !linkSnapshot.length) {
+    // بدون لینک، ارسال نهایی نمی‌شود (مدیر می‌تواند با خاموش‌کردن «اجبار لینک هنرمند» آزاد کند).
+    draft.data.linkWarned = true;
+    saveMusicDraft_(draft);
+    setSession_("M:" + uid, "MUSIC_LINKS", { draftId: draft.draftId });
+    sendMessage_(chatId, t_(uid, "ARTIST_LINKS_REQUIRED"), musicStepKeyboard_(uid, "MUSIC_LINKS", draft.mode));
+    showDraftLinksPanel_(chatId, uid, draft);
+    return;
+  }
+
   const submission = saveMusicSubmission_(draft, {
     title: title, artists: artists, featuring: String(data.featuring || ""), caption: String(data.caption || ""),
     links: data.links || [], platformVisible: data.platformVisible || {},
     // ژانرهای مرحلهٔ ژانر داخل details می‌روند؛ همان‌جا هشتگ متغیر پست از آن ساخته می‌شود.
-    details: Object.assign({}, data.details || {}, (Array.isArray(data.genres) && data.genres.length) ? { genres: data.genres } : {}),
+    details: Object.assign({}, data.details || {}, (Array.isArray(data.genres) && data.genres.length) ? { genres: data.genres } : {}, { channels: explicitChannelIds, channelTemplates: selectedChannels.map(function(c) { return { id: c.id, template: c.template }; }), artistLinks: linkSnapshot }),
     credits: data.credits || [], scheduleText: data.scheduleText || "", scheduledOffset: data.scheduledOffsetMin ? Number(data.scheduledOffsetMin) : -1,
-    scheduledAtValue: data.scheduledAtMs || ""
+    scheduledAtValue: data.scheduledAtMs || "", channels: selectedChannels, linkSnapshot: linkSnapshot
+  });
+  selectedChannels.forEach(function(c) {
+    upsertSubmissionChannelRecord_(submission, c, { status: String(getSetting_("PUBLISH_MODE") || "auto") === "approval" ? "pending" : "queued", template: c.template, access: c.access });
   });
   clearSession_("M:" + uid);
   const approval = String(getSetting_("PUBLISH_MODE") || "auto") === "approval";
   const lang = userLang_(uid);
   const pendingText = niceText_(approval ? "MUSIC_PENDING_TEXT" : "MUSIC_AUTO_TEXT", null, lang) || (approval ? DEFAULT_SETTINGS.MUSIC_PENDING_TEXT : DEFAULT_SETTINGS.MUSIC_AUTO_TEXT);
+  // ⚠️ عمداً هیچ لیست/تعداد کانال مقصد به هنرمند نشان داده نمی‌شود؛ مدیر تعیین می‌کند.
   sendMessage_(chatId, t_(uid, "SUBMIT_OK") + "\n" + t_(uid, "SUBMIT_ID") + submission.id + "\n" + t_(uid, "SUBMIT_TITLE_L") + submission.title + "\n" + t_(uid, "SUBMIT_ARTIST_L") + formatArtistNames_(artists) + "\n" + t_(uid, "SUBMIT_DATE_L") + formatDate_(submission.scheduledAt) + "\n\n" + pendingText, adminOrUserKeyboard_(uid));
   getAdmins_().forEach(function(a) {
     sendMessage_(a, "🎵 ارسال جدید (" + (approval ? "در انتظار تأیید" : "در صف انتشار") + ")\n🆔 " + submission.id + "\n🧩 " + (SUB_MODE_LABELS_[submission.mode] || submission.mode) + "\n👤 " + uid + "\n📀 " + submission.title + "\n🎤 " + formatArtistNames_(artists),
@@ -6196,6 +6640,7 @@ function adminOrUserKeyboard_(uid) {
 function handleUserState_(message, session, user) {
   const uid = String(user && user.userId || message.from.id);
   if (session && String(session.state).indexOf("MUSIC_") === 0) { handleMusicMessage_(message, session); return; }
+  if (session && session.state === "VIP_PAY_REF") { handleVipPaymentInput_(message, session); return; }
   if (session && session.state === "USR_SUPPORT") { handleSupportUserMessage_(message, session); return; }
   if (session && String(session.state).indexOf("PERS_") === 0) { handleProfileState_(message, session); return; }
   clearSession_("M:" + uid);
@@ -6363,14 +6808,18 @@ function publishSelectedDestinations_(sub, stage) {
   });
 }
 function publishOneSubmission_(sub) {
-  const channel = normalizeChannelId_(getSetting_("CHANNEL_ID"));
-  if (!channel) { console.error("CHANNEL_ID نامعتبر است"); return false; }
-  // اگر اثر قبلاً منتشر شده و حالا ویرایش شده است، سعی می‌کنیم پست کانال را ویرایش کنیم تا کامنت‌ها حفظ شود
+  const channels = resolveSubmissionChannels_(sub);
+  if (!channels.length) {
+    setSubmissionField_(sub.id, "status", "failed");
+    setSubmissionField_(sub.id, "failure", "no_publish_channel");
+    logError_("publishOneSubmission_:no_channel", new Error("هیچ کانال مجازی برای این اثر نیست"), { submissionId: sub.id, userId: sub.userId });
+    return false;
+  }
+  // اگر اثر قبلاً منتشر شده و حالا ویرایش شده است، سعی می‌کنیم پست‌های کانال را ویرایش کنیم تا کامنت‌ها حفظ شوند
   const wasPublished = !!String(sub.publishedAt || "").trim() && String(sub.status) !== "published";
-  const hadMessages = !!(String(sub.visualMessageIds||"").trim() || String(sub.audioMessageIds||"").trim());
+  const hadMessages = !!(String(sub.visualMessageIds || "").trim() || String(sub.audioMessageIds || "").trim());
   if (wasPublished && hadMessages && String(sub.status) === "approved") {
-    const edited = tryEditPublishedPost_(sub, channel);
-    if (edited) {
+    if (editPublishedChannels_(sub)) {
       setSubmissionField_(sub.id, "status", "published");
       setSubmissionField_(sub.id, "publishedAt", new Date());
       savePublishStage_(sub, parsePublishStage_(sub));
@@ -6382,17 +6831,38 @@ function publishOneSubmission_(sub) {
   setSubmissionField_(sub.id, "status", "publishing");
   sub.status = "publishing";
   const stage = parsePublishStage_(sub);
-  const lang = userLang_(sub.userId);
   try {
     initPublishStageForSubmission_(sub, stage);
-    // فری‌استایل ویدیویی: اجرای کاربر خودِ پست کانال است (کاور و برش صوتی ارسال نمی‌شود).
-    const fsVideo = String(sub.mode) === "freestyle" && !stage.freestylePosted ? freestyleVideoFor_(sub.id) : [];
-    if (fsVideo.length) publishFreestyleStage_(sub, stage, channel, fsVideo[0]);
-    else if (!stage.visual) publishVisualStage_(sub, stage, channel);
-    if (["coming_soon", "coming_next"].indexOf(String(sub.mode)) < 0 && !stage.freestylePosted) publishAudioStage_(sub, stage, channel);
-    else if (!stage.text && !stage.visual && !stage.freestylePosted) publishTextStage_(sub, stage, channel);
-    // کانال‌های ثانویه فقط پس از انتشار موفق کانال اصلی و طبق انتخاب مدیر منتشر می‌شوند.
-    publishSelectedDestinations_(sub, stage);
+    if (!stage.channels || typeof stage.channels !== "object") stage.channels = {};
+    const ctx = { previews: {} };
+    const failures = [];
+    channels.forEach(function(ch) {
+      const cs = stage.channels[ch.id];
+      if (cs && cs.done) return;
+      try {
+        publishReleaseToChannel_(sub, ch, stage, ctx);
+        const ids = [].concat(stage.channels[ch.id].visualMessageIds || [], stage.channels[ch.id].audioMessageIds || []);
+        upsertSubmissionChannelRecord_(sub, ch, { status: "published", template: ch.template, access: ch.access, message_ids: ids.join("|"), error: "" });
+      } catch (e) {
+        const msg = String(e && e.message || e);
+        stage.channels[ch.id] = stage.channels[ch.id] || {};
+        stage.channels[ch.id].error = truncate_(msg, 300);
+        failures.push({ channel: ch, error: msg });
+        upsertSubmissionChannelRecord_(sub, ch, { status: "failed", template: ch.template, access: ch.access, error: truncate_(msg, 300) });
+        logError_("publishOneSubmission_:channel", e, { submissionId: sub.id, channelId: ch.id, userId: sub.userId });
+      }
+    });
+    syncLegacyStageFromChannels_(sub, stage);
+    savePublishStage_(sub, stage);
+    if (failures.length) {
+      const summary = failures.map(function(f) { return f.channel.title + ": " + truncate_(f.error, 120); }).join(" | ");
+      setSubmissionField_(sub.id, "status", "failed");
+      setSubmissionField_(sub.id, "failure", truncate_(summary, 400));
+      getAdmins_().forEach(function(a) {
+        sendMessage_(a, t_(a, "PUBLISH_FAIL_ADMIN", { id: sub.id, t: sub.title, s: failures[0].channel.title, e: truncate_(summary, 300) }), { inline_keyboard: [[{ text: "🔁 تلاش دوباره", callback_data: "a:subretry:" + sub.id }, { text: "📂 جزئیات", callback_data: "a:sub:" + sub.id }]] });
+      });
+      return false;
+    }
     const finished = new Date();
     setSubmissionField_(sub.id, "status", "published");
     setSubmissionField_(sub.id, "publishedAt", finished);
@@ -6407,7 +6877,7 @@ function publishOneSubmission_(sub) {
       const postUrl = submissionPrimaryPostLink_(sub);
       if (postUrl) sendOwnerChannelPromo_(sub, postUrl);
     } catch (e) { logError_("sendOwnerChannelPromo_", e, { submissionId: sub.id }); }
-    getAdmins_().forEach(function(a) { sendMessage_(a, t_(a, "PUBLISH_ADMIN_NOTIFY", { id: sub.id, t: sub.title })); });
+    getAdmins_().forEach(function(a) { sendMessage_(a, t_(a, "PUBLISH_ADMIN_NOTIFY", { id: sub.id, t: sub.title }) + "\n📡 " + channels.map(function(c) { return c.title + " (" + postTemplateLabel_(c.template) + ")"; }).join(" · ")); });
     return true;
   } catch (e) {
     const message = String(e && e.message || e);
@@ -6420,6 +6890,206 @@ function publishOneSubmission_(sub) {
     });
     return false;
   }
+}
+
+// ───────────────────── انتشار یک اثر در یک کانال با قالب همان کانال ─────────────────────
+function publishReleaseToChannel_(sub, ch, stage, ctx) {
+  const cs = stage.channels[ch.id] = stage.channels[ch.id] || {};
+  cs.chatId = ch.chatId;
+  cs.template = ch.template;
+  cs.title = ch.title;
+  let tplKey = normalizeTemplateKey_(ch.template);
+  // «بیشتر دیده شدن» VIP: اگر مدیر اجازه داده باشد، پست کاربر VIP روی کانال کلاسیک
+  // با قالب ویژهٔ VIP منتشر می‌شود (پیش‌فرض خاموش است تا انتخاب مدیر محترم بماند).
+  if (tplKey === "classic" && String(getSetting_("VIP_TEMPLATE_AUTO") || "false") === "true" && isVipUser_(sub.userId)) tplKey = "vip";
+  const tpl = postTemplateMeta_(tplKey);
+  cs.template = tplKey;
+  const caption = buildTemplateCaption_(sub, ch, { template: tplKey });
+  // قالب کلاسیک دقیقاً رفتار قبلی را نگه می‌دارد (دکمهٔ دانلود روی کاور فقط با تنظیم مدیر).
+  const coverMarkup = tplKey === "classic" ? postActionsMarkup_(sub) : templateDownloadMarkup_(sub, ch, tplKey, "");
+
+  // فری‌استایل ویدیویی: اجرای کاربر خودِ پست کانال است (کاور و برش صوتی ارسال نمی‌شود).
+  if (String(sub.mode) === "freestyle" && !cs.freestylePosted) {
+    const fsVideo = freestyleVideoFor_(sub.id);
+    if (fsVideo.length) {
+      const r = sendFreestylePostBody_(sub, ch.chatId, fsVideo[0], { caption: caption, markup: coverMarkup });
+      if (!r.ok) throw new Error(r.error);
+      cs.visualMessageIds = r.messageIds; if (r.captionMessageId) cs.captionMessageId = r.captionMessageId; cs.visualKind = r.visualKind;
+      cs.visual = true; cs.freestylePosted = true; cs.audio = true; cs.preview = true; cs.done = true;
+      savePublishStage_(sub, stage);
+      return;
+    }
+  }
+
+  if (tpl.cover && !cs.visual) {
+    const r = sendVisualPostBody_(sub, ch.chatId, { caption: caption, markup: coverMarkup });
+    if (!r.ok) throw new Error(r.error);
+    cs.visualMessageIds = r.messageIds;
+    if (r.captionMessageId) cs.captionMessageId = r.captionMessageId;
+    if (r.visualKind) cs.visualKind = r.visualKind;
+    if (r.usedDefaultCover) cs.usedDefaultCover = true;
+    cs.visual = true;
+    savePublishStage_(sub, stage);
+    syncLegacyStageFromChannels_(sub, stage);
+  }
+
+  if (["coming_soon", "coming_next"].indexOf(String(sub.mode)) >= 0) {
+    if (!cs.visual) {
+      const r = sendTextOnlyChannelPost_(ch.chatId, caption);
+      if (!r || !r.ok) throw new Error("ارسال متن ناموفق: " + String(r && r.description || ""));
+      cs.visualMessageIds = [Number(r.result.message_id)];
+      cs.visual = true; cs.text = true;
+      savePublishStage_(sub, stage);
+    }
+    cs.done = true;
+    savePublishStage_(sub, stage);
+    return;
+  }
+
+  if (tpl.audio && tpl.audio !== "none" && !cs.audio) {
+    sendTemplateAudioForChannel_(sub, ch, cs, tplKey, tpl, stage, ctx);
+  }
+  if (!tpl.cover && !tpl.audio) {
+    const r = sendTextOnlyChannelPost_(ch.chatId, caption);
+    if (!r || !r.ok) throw new Error("ارسال متن ناموفق: " + String(r && r.description || ""));
+    cs.visualMessageIds = [Number(r.result.message_id)]; cs.visual = true;
+  }
+  cs.audio = true;
+  cs.done = true;
+  savePublishStage_(sub, stage);
+}
+function sendTemplateAudioForChannel_(sub, ch, cs, tplKey, tpl, stage, ctx) {
+  const media = getSubmissionMedia_(sub.id);
+  const audios = media.filter(function(m) { return m.kind === "audio"; });
+  if (!audios.length) throw new Error("فایل صوتی برای این ارسال پیدا نشد.");
+  const previewSeconds = getMusicPreviewSeconds_();
+  const sentIds = (cs.audioMessageIds || []).slice();
+  const persist = function() {
+    cs.audioMessageIds = sentIds.slice();
+    try { savePublishStage_(sub, stage); syncLegacyStageFromChannels_(sub, stage); } catch (e) {}
+  };
+  audios.forEach(function(item, index) {
+    const key = "audioSent_" + index;
+    if (cs[key]) return;
+    const trackId = musicTrackIdFromMedia_(sub.id, item, index);
+    const libTrack = getMusicLibraryTrack_(trackId);
+    const trackTitle = String(libTrack && libTrack.title || (audios.length > 1 ? String(sub.title || "Track") + " — " + (index + 1) : String(sub.title || "Track")));
+    const performer = joinArtistsAmp_(sub.artists) + (String(sub.featuring || "").trim() ? " feat. " + joinArtistsAmp_(sub.featuring) : "");
+    const caption = buildTemplateAudioCaption_(sub, ch, tplKey, trackTitle, index);
+    const markup = templateDownloadMarkup_(sub, ch, tplKey, trackId);
+    const payload = { chat_id: ch.chatId, title: truncate_(trackTitle, 60), performer: truncate_(performer, 60), caption: caption, parse_mode: "HTML" };
+    if (markup) payload.reply_markup = markup;
+    const coverMessageId = Number((cs.visualMessageIds || [])[0] || 0);
+    if (coverMessageId && String(getSetting_("POST_AUDIO_REPLY_TO_COVER") || "true") !== "false") payload.reply_to_message_id = coverMessageId;
+
+    let result = null;
+    if (tpl.audio === "full") {
+      // قالب «آهنگ کامل»: خود فایل کامل در کانال می‌رود (فقط اگر مدیر این قالب را انتخاب کرده باشد).
+      const full = telegramRequest_("sendAudio", Object.assign({}, payload, { audio: item.fileId }));
+      if (full && full.ok && full.result) { sentIds.push(Number(full.result.message_id)); persist(); cs[key] = true; return; }
+      console.warn("full track send failed, falling back to preview: " + String(full && full.description || ""));
+    }
+    let blob = null;
+    try {
+      if (ctx && ctx.previews && ctx.previews[item.fileId]) blob = ctx.previews[item.fileId];
+      else {
+        blob = buildAudioPreviewBlob_(item.fileId, previewSeconds);
+        if (ctx && ctx.previews) ctx.previews[item.fileId] = blob;
+      }
+    } catch (e) { blob = null; }
+    if (blob) {
+      const previewPayload = Object.assign({}, payload, { audio: blob });
+      result = sendChannelAudio_(previewPayload);
+      if (result && result.ok && result.result) { sentIds.push(Number(result.result.message_id)); persist(); cs.preview = true; cs[key] = true; return; }
+      console.warn("preview failed: " + String(result && result.description || ""));
+    }
+    cs.previewOnly = true;
+    cs.skippedFullReason = "preview_unavailable";
+    cs[key] = true;
+    try { markFloorTrack_(trackId, String(getSetting_("PREVIEW_FALLBACK_POLICY") || "preview_only") !== "admin_alert"); } catch (e) {}
+  });
+  cs.audioMessageIds = sentIds.slice();
+  if (!sentIds.length) {
+    const coverId = Number(cs.captionMessageId || (cs.visualMessageIds || [])[0] || 0);
+    const fallbackMarkup = templateDownloadMarkup_(sub, ch, tplKey, "");
+    if (coverId && fallbackMarkup) {
+      try { telegramRequest_("editMessageReplyMarkup", { chat_id: ch.chatId, message_id: coverId, reply_markup: fallbackMarkup }); } catch (e) {}
+      cs.downloadButtonOnCover = true;
+    }
+  }
+  cs.audio = true;
+  savePublishStage_(sub, stage);
+}
+function syncLegacyStageFromChannels_(sub, stage) {
+  const main = mainPublishChannel_();
+  if (!main) return;
+  const cs = stage.channels && stage.channels[main.id];
+  if (!cs) return;
+  stage.visual = !!cs.visual;
+  stage.audio = !!cs.audio;
+  stage.preview = !!cs.preview;
+  stage.visualKind = cs.visualKind || stage.visualKind;
+  stage.captionMessageId = cs.captionMessageId || stage.captionMessageId;
+  stage.freestylePosted = !!cs.freestylePosted;
+  stage.usedDefaultCover = !!cs.usedDefaultCover;
+  try {
+    if (cs.visualMessageIds) setSubmissionField_(sub.id, "visualMessageIds", (cs.visualMessageIds || []).join("|"));
+    if (cs.audioMessageIds) setSubmissionField_(sub.id, "audioMessageIds", (cs.audioMessageIds || []).join("|"));
+  } catch (e) {}
+}
+function allStageMessageIds_(stage) {
+  const ids = [];
+  const push = function(v) { positiveIdList_(v).forEach(function(id) { if (ids.indexOf(id) < 0) ids.push(id); }); };
+  if (stage && stage.visualMessageIds) push((stage.visualMessageIds || []).join("|"));
+  if (stage && stage.audioMessageIds) push((stage.audioMessageIds || []).join("|"));
+  if (stage && stage.captionMessageId) push(String(stage.captionMessageId));
+  if (stage && stage.channels) {
+    Object.keys(stage.channels).forEach(function(k) {
+      const cs = stage.channels[k] || {};
+      if (cs.visualMessageIds) push((cs.visualMessageIds || []).join("|"));
+      if (cs.audioMessageIds) push((cs.audioMessageIds || []).join("|"));
+      if (cs.captionMessageId) push(String(cs.captionMessageId));
+    });
+  }
+  return ids;
+}
+function editPublishedChannels_(sub) {
+  const stage = parsePublishStage_(sub);
+  if (!stage.channels || !Object.keys(stage.channels).length) {
+    const main = normalizeChannelId_(getSetting_("CHANNEL_ID"));
+    return main ? tryEditPublishedPost_(sub, main) : false;
+  }
+  let ok = false;
+  Object.keys(stage.channels).forEach(function(chId) {
+    const cs = stage.channels[chId] || {};
+    const ch = getPublishChannelById_(chId);
+    if (!ch || !cs.chatId) return;
+    const tplKey = normalizeTemplateKey_(cs.template || ch.template);
+    const caption = buildTemplateCaption_(sub, ch, { template: tplKey });
+    const markup = templateDownloadMarkup_(sub, ch, tplKey, "");
+    const vids = cs.visualMessageIds || [];
+    if (vids.length) {
+      const kind = String(cs.visualKind || "");
+      if (kind === "video_note" && cs.captionMessageId) {
+        const rt = telegramRequest_("editMessageText", { chat_id: cs.chatId, message_id: Number(cs.captionMessageId), text: caption, parse_mode: "HTML", reply_markup: markup || undefined });
+        if (rt && rt.ok) ok = true;
+      } else {
+        const r = telegramRequest_("editMessageCaption", { chat_id: cs.chatId, message_id: vids[0], caption: caption, parse_mode: "HTML", reply_markup: markup || undefined });
+        if (r && r.ok) ok = true;
+      }
+    }
+    (cs.audioMessageIds || []).forEach(function(mid, idx) {
+      const tracks = getMusicLibrary_().filter(function(t) { return t.submissionId === sub.id; });
+      const t = tracks[idx];
+      if (!t) return;
+      const cap = buildTemplateAudioCaption_(sub, ch, tplKey, t.title, idx);
+      const btn = templateDownloadMarkup_(sub, ch, tplKey, t.trackId);
+      const rr = telegramRequest_("editMessageCaption", { chat_id: cs.chatId, message_id: Number(mid), caption: cap, parse_mode: "HTML", reply_markup: btn || undefined });
+      if (rr && rr.ok) ok = true;
+    });
+  });
+  if (ok) { stage.editedAt = nowMs_(); savePublishStage_(sub, stage); }
+  return ok;
 }
 
 function tryEditPublishedPost_(sub, channel){
@@ -6734,8 +7404,7 @@ function sendChannelAudio_(payload) {
 // این کار روزانه دکمهٔ پست‌های منتشرشده را با توکن تازه بازنویسی می‌کند.
 function refreshDownloadButtonsJob() {
   resetRuntimeCaches_();
-  const channel = normalizeChannelId_(getSetting_("CHANNEL_ID"));
-  if (!channel) return 0;
+  const mainChannel = normalizeChannelId_(getSetting_("CHANNEL_ID"));
   if (String(getSetting_("DOWNLOAD_LINK_TOKEN") || "true") !== "true") return 0;
   const refreshDays = Math.max(1, Number(getSetting_("DOWNLOAD_BUTTON_REFRESH_DAYS") || 20));
   const includeCover = String(getSetting_("POST_DOWNLOAD_BUTTON_ON_COVER") || "false") === "true";
@@ -6744,18 +7413,32 @@ function refreshDownloadButtonsJob() {
   for (let i = 0; i < subs.length; i++) {
     const sub = subs[i];
     const stage = parsePublishStage_(sub);
-    const ids = (stage.audioMessageIds || []).concat(includeCover ? (stage.visualMessageIds || []) : []);
-    if (!ids.length) continue;
-    // اگر آخرین تازه‌سازی نزدیک است، رد شو
     const last = dateMillis_(stage.downloadRefreshedAt) || dateMillis_(sub.publishedAt);
     if (last && (nowMs_() - last) < refreshDays * 86400000) continue;
-    const markup = downloadButtonMarkup_(sub, "");
-    if (!markup) continue;
     let ok = false;
-    ids.forEach(function(mid) {
-      const r = telegramRequest_("editMessageReplyMarkup", { chat_id: channel, message_id: Number(mid), reply_markup: markup });
-      if (r && r.ok) ok = true;
-    });
+    if (stage.channels && Object.keys(stage.channels).length) {
+      Object.keys(stage.channels).forEach(function(chId) {
+        const cs = stage.channels[chId] || {};
+        const ch = getPublishChannelById_(chId);
+        const chatId = cs.chatId || (ch && ch.chatId);
+        if (!chatId) return;
+        const tplKey = normalizeTemplateKey_(cs.template || (ch && ch.template));
+        const markup = templateDownloadMarkup_(sub, ch, tplKey, "");
+        if (!markup) return;
+        const ids = [].concat(cs.audioMessageIds || [], includeCover || tplKey !== "classic" ? (cs.visualMessageIds || []) : []);
+        ids.forEach(function(mid) {
+          const r = telegramRequest_("editMessageReplyMarkup", { chat_id: chatId, message_id: Number(mid), reply_markup: markup });
+          if (r && r.ok) ok = true;
+        });
+      });
+    } else {
+      const ids = (stage.audioMessageIds || []).concat(includeCover ? (stage.visualMessageIds || []) : []);
+      const markup = downloadButtonMarkup_(sub, "");
+      if (mainChannel && markup) ids.forEach(function(mid) {
+        const r = telegramRequest_("editMessageReplyMarkup", { chat_id: mainChannel, message_id: Number(mid), reply_markup: markup });
+        if (r && r.ok) ok = true;
+      });
+    }
     if (ok) { stage.downloadRefreshedAt = nowMs_(); savePublishStage_(sub, stage); updated++; }
   }
   if (updated) console.log("refreshDownloadButtonsJob: " + updated + " پست تازه شد.");
@@ -7598,10 +8281,13 @@ function showAdminMenu_(chatId, prefix) {
   const queue = all.filter(function(s) { return s.status === "approved" || s.status === "publishing"; }).length;
   const published = all.filter(function(s) { return s.status === "published"; }).length;
   const failed = all.filter(function(s) { return s.status === "failed"; }).length;
-  let usersCount = 0, totalDownloads = 0, ccCount = 0;
+  let usersCount = 0, totalDownloads = 0, ccCount = 0, vipCount = 0, payPending = 0, publishChCount = 0;
   try { usersCount = getAllUsers_().length; } catch (e) {}
   try { totalDownloads = getMusicLibrary_().reduce(function(sum, t) { return sum + (Number(t.downloadCount) || 0); }, 0); } catch (e) {}
   try { ccCount = getConnectedChannels_().filter(function(c) { return c.status === "active"; }).length; } catch (e) {}
+  try { vipCount = getSubscriptions_().filter(function(s) { return s.status === "active" && dateMillis_(s.expiresAt) > nowMs_(); }).length; } catch (e) {}
+  try { payPending = getPaymentRequests_().filter(function(r) { return r.status === "pending"; }).length; } catch (e) {}
+  try { publishChCount = activePublishChannels_().length; } catch (e) {}
   const lines = [
     "👑 FLORA CONTROL CENTER · مرکز فرماندهی",
     "🎛 پنل مدیریت فلورا بات (v" + APP.VERSION + ")",
@@ -7609,6 +8295,7 @@ function showAdminMenu_(chatId, prefix) {
     "🎤 هنرمندان: " + usersCount + " · 💿 آثار: " + all.length + " · ✅ منتشرشده: " + published,
     "⏳ در انتظار تأیید: " + pending + " · 🗓 صف: " + queue + (failed ? " · ⚠️ خطا: " + failed : ""),
     "⬇️ کل دانلودها: " + totalDownloads + " · 📢 کانال‌های متصل: " + ccCount,
+    "📡 کانال‌های انتشار: " + publishChCount + " · 💎 اشتراک فعال: " + vipCount + (payPending ? " · ⏳ پرداخت در انتظار: " + payPending : ""),
     "📺 کانال: " + (getSetting_("CHANNEL_ID") || "تنظیم نشده") + " · 🚦 وضعیت: " + (getSetting_("BOT_MODE") || "active") + " · انتشار: " + (getSetting_("PUBLISH_MODE") || "auto")
   ];
   sendMessage_(chatId, (prefix ? prefix + "\n\n" : "") + lines.join("\n"), adminKeyboard_());
@@ -7628,7 +8315,7 @@ const ADMIN_MENU_BUTTON_TEXTS_ = [
   "🎤 فری‌استایل", "🎤 فری‌استایل‌ها", "👥 کاربران", "🛡 دسترسی مدیران", "💬 پشتیبانی",
   "📣 پیام همگانی", "📢 کانال‌های وصل‌شده", "🖼 بنر تبلیغاتی", "😴 غیرفعال‌ها", "⚙️ تنظیمات",
   "📺 کانال", "🎨 دکمه‌ها و رنگ‌ها", "🆘 درخواست‌های رمز", "🌐 عضویت اجباری", "📊 آمار",
-  "🧹 نگهداری و بکاپ", "📚 آثار من"
+  "🧹 نگهداری و بکاپ", "📚 آثار من", "📡 کانال‌ها و قالب‌ها", "💎 اشتراک‌ها"
 ];
 function isAdminMenuButton_(text) { return ADMIN_MENU_BUTTON_TEXTS_.indexOf(String(text || "").trim()) >= 0; }
 function handleAdminMenuMessage_(message) {
@@ -7650,6 +8337,8 @@ function handleAdminMenuMessage_(message) {
     ["😴 غیرفعال‌ها", "settings", function() { showInactivePanel_(chatId, uid); }],
     ["⚙️ تنظیمات", "settings", function() { showSettingsPanel_(chatId, uid, 0); }],
     ["📺 کانال", "channel", function() { showChannelPanel_(chatId, uid); }],
+    ["📡 کانال‌ها و قالب‌ها", "channel", function() { showPublishChannelsPanel_(chatId, uid); }],
+    ["💎 اشتراک‌ها", "settings", function() { showAdminSubscriptionsPanel_(chatId, uid); }],
     ["🎨 دکمه‌ها و رنگ‌ها", "settings", function() { showColorsPanel_(chatId, uid); }],
     ["🆘 درخواست‌های رمز", "users", function() { showResetRequestsPanel_(chatId, uid); }],
     ["🌐 عضویت اجباری", "settings", function() { showFJPanel_(chatId, uid); }],
@@ -7743,12 +8432,13 @@ function showSettingEditor_(chatId, uid, rowIndex) {
 }
 function showChannelPanel_(chatId, uid) {
   if (!adminGate_(chatId, uid, "channel")) return;
-  const secondaryCount = publishDestinations_().length;
-  const lines = ["📺 کانال انتشار", "🆔 " + (getSetting_("CHANNEL_ID") || "—"), "➕ کانال‌های ثانویه: " + secondaryCount + "\nفرمت هر خط: شناسه | فوتر | قالب ({title} {artist} {description} {track})", "🧪 کانال آزمایشی: " + (getSetting_("STAGING_CHANNEL_ID") || "—"), "🔗 " + (getSetting_("BOT_USERNAME") ? "@" + String(getSetting_("BOT_USERNAME")).replace(/^@/, "") : "—"), "🔁 حالت: " + (getSetting_("PUBLISH_MODE") || "auto") + " · فعال: " + (getSetting_("PUBLISH_ENABLED") || "true"), "⏱ فاصله: " + (getSetting_("PUBLISH_INTERVAL_MIN") || "10") + " دقیقه", "📝 فوتر: " + (getSetting_("CHANNEL_FOOTER") || "—")];
+  const secondaryCount = getPublishChannelRows_().length;
+  const lines = ["📺 کانال انتشار", "🆔 " + (getSetting_("CHANNEL_ID") || "—"), "🎨 قالب کانال اصلی: " + postTemplateLabel_(getSetting_("MAIN_CHANNEL_TEMPLATE")) + " · " + (String(getSetting_("MAIN_CHANNEL_ACCESS") || "free") === "free" ? "رایگان" : "VIP"), "➕ کانال‌های چندگانه: " + secondaryCount + " (از «📡 کانال‌ها و قالب‌ها»)", "🧪 کانال آزمایشی: " + (getSetting_("STAGING_CHANNEL_ID") || "—"), "🔗 " + (getSetting_("BOT_USERNAME") ? "@" + String(getSetting_("BOT_USERNAME")).replace(/^@/, "") : "—"), "🔁 حالت: " + (getSetting_("PUBLISH_MODE") || "auto") + " · فعال: " + (getSetting_("PUBLISH_ENABLED") || "true"), "⏱ فاصله: " + (getSetting_("PUBLISH_INTERVAL_MIN") || "10") + " دقیقه", "📝 فوتر: " + (getSetting_("CHANNEL_FOOTER") || "—")];
   sendMessage_(chatId, lines.join("\n"), { inline_keyboard: [
     [{ text: "🆔 تغییر کانال", callback_data: "set:custom:" + rowOfSetting_("CHANNEL_ID") }],
     [{ text: "📝 فوتر پست", callback_data: "set:custom:" + rowOfSetting_("CHANNEL_FOOTER") }],
-    [{ text: "➕ تنظیم کانال‌های ثانویه", callback_data: "set:custom:" + rowOfSetting_("PUBLISH_DESTINATIONS") }],
+    [{ text: "📡 کانال‌ها و قالب‌ها", callback_data: "pch:panel" }],
+    [{ text: "➕ کانال‌های ثانویهٔ قدیمی", callback_data: "set:custom:" + rowOfSetting_("PUBLISH_DESTINATIONS") }],
     [{ text: "🔁 حالت انتشار", callback_data: "set:edit:" + rowOfSetting_("PUBLISH_MODE") }],
     [{ text: "⏱ فاصله", callback_data: "set:edit:" + rowOfSetting_("PUBLISH_INTERVAL_MIN") }],
     [{ text: "🆔 یوزرنیم ربات", callback_data: "set:custom:" + rowOfSetting_("BOT_USERNAME") }],
@@ -7807,6 +8497,8 @@ function handleAdminCallback_(cb) {
   if (parts[0] === "acc") { handleConnectedChannelsAdminCallback_(cb); return; }
   if (parts[0] === "bn") { handleCcBannerCallback_(cb); return; }
   if (parts[0] === "ccp") { handleCcPostsCallback_(cb); return; }
+  if (parts[0] === "vipx") { handleAdminVipCallback_(cb); return; }
+  if (parts[0] === "pch") { handlePublishChannelCallback_(cb); return; }
   const p0 = parts[0];
   try {
     if (data === "a:home") { clearSession_("M:" + uid); answerCallbackQuery_(cb.id); showAdminMenu_(chatId); return; }
@@ -8040,11 +8732,17 @@ function showSubmissionDetail_(chatId, uid, submissionId, editMsgId) {
   if (genreTags.length) lines.push("🏷 ژانر: " + genreTags.map(function(t) { return "#" + t; }).join(" "));
   const postTags = buildPostHashtags_(sub);
   if (postTags) lines.push("#️⃣ هشتگ‌های پست: " + postTags);
+  lines.push("📡 کانال‌های انتشار:\n" + submissionChannelsSummary_(sub));
+  try {
+    const snap = JSON.parse(sub.linkSnapshot || "[]");
+    if (Array.isArray(snap) && snap.length) lines.push("🔗 لینک‌های ثبت‌شده برای این اثر:\n" + snap.map(function(l) { return "• " + platformMeta_(l.platform).label + ": " + l.url + (l.source === "profile" ? " (پروفایل)" : ""); }).join("\n"));
+  } catch (e) {}
   if (sub.failure) lines.push("⚠️ خطا: " + truncate_(sub.failure, 200));
   if (sub.reviewNote) lines.push("📝 یادداشت بررسی: " + truncate_(sub.reviewNote, 200));
   if (sub.links && sub.links.length) lines.push("🔗 لینک‌ها:\n" + sub.links.map(function(l) { return "• " + platformMeta_(l.platform).label + ": " + l.url; }).join("\n"));
   const rows = [];
-  if (publishDestinations_().length && ["pending", "approved", "failed", "rejected"].indexOf(sub.status) >= 0) rows.push([{ text: "📺 انتخاب کانال‌های انتشار", callback_data: "a:subdest:" + sub.id }]);
+  if (activePublishChannels_().length && ["pending", "approved", "failed", "rejected"].indexOf(sub.status) >= 0) rows.push([{ text: "📡 کانال‌های این ارسال", callback_data: "a:subch:" + sub.id }]);
+  if (publishDestinations_().length && ["pending", "approved", "failed", "rejected"].indexOf(sub.status) >= 0) rows.push([{ text: "📺 کانال‌های ثانویهٔ قدیمی", callback_data: "a:subdest:" + sub.id }]);
   if (sub.status === "pending") rows.push([{ text: "✅ تأیید", callback_data: "a:subapprove:" + sub.id }, { text: "❌ رد", callback_data: "a:subreject:" + sub.id }]);
   if (sub.status === "approved") rows.push([{ text: "🚀 انتشار فوری", callback_data: "a:subpub:" + sub.id }, { text: "🗓 تغییر زمان", callback_data: "a:subtime:" + sub.id }]);
   if (sub.status === "publishing") rows.push([{ text: "⏹ توقف انتشار", callback_data: "a:substop:" + sub.id }]);
@@ -8077,6 +8775,33 @@ function handleSubmissionCallback_(cb, parts) {
   }
   if (action === "comingsoon") { handleComingSoonCallback_(cb, parts); return; }
   if (action === "freestyle") { handleFreestyleCallback_(cb, parts); return; }
+  if (action === "subch") { answerCallbackQuery_(cb.id); showSubmissionChannelPicker_(chatId, uid, parts[2] || "", msgId); return; }
+  if (action === "subchtoggle") {
+    const sub = getSubmission_(parts[2] || "");
+    if (!sub) { answerCallbackQuery_(cb.id, "ارسال پیدا نشد"); return; }
+    const all = activePublishChannels_(); const idx = Number(parts[3]);
+    const ch = all[idx]; if (!ch) { answerCallbackQuery_(cb.id, "کانال نامعتبر"); return; }
+    const details = (sub.request && sub.request.details) || {};
+    let sel = Array.isArray(details.channels) && details.channels.length ? details.channels.map(String) : defaultChannelIdsForUser_(sub.userId).map(function(c) { return c.id; });
+    const at = sel.indexOf(String(ch.id));
+    if (at >= 0) sel.splice(at, 1); else sel.push(String(ch.id));
+    setSubmissionDetails_(sub.id, { channels: sel });
+    setSubmissionField_(sub.id, "channelsJson", JSON.stringify(sel));
+    answerCallbackQuery_(cb.id, ch.title + (at >= 0 ? " حذف شد" : " انتخاب شد"));
+    showSubmissionChannelPicker_(chatId, uid, sub.id, msgId);
+    return;
+  }
+  if (action === "subchsave") {
+    const sub = getSubmission_(parts[2] || "");
+    if (sub) {
+      const sel = submissionSelectedChannelIds_(sub);
+      logAdminAction_(uid, "sub_channels", sub.id, sel.join(","));
+      if (sub.status === "published") sendMessage_(chatId, "✅ ذخیره شد. برای اعمال، اثر را با «انتشار فوری» یا ویرایش دوباره منتشر کن.", { inline_keyboard: [[{ text: "📂 جزئیات", callback_data: "a:sub:" + sub.id }]] });
+      else showSubmissionDetail_(chatId, uid, sub.id);
+    }
+    answerCallbackQuery_(cb.id, "ذخیره شد");
+    return;
+  }
   if (action === "sub") {
     const arg = parts[2] || "";
     if (arg === "queue" || arg === "published" || arg === "") { answerCallbackQuery_(cb.id); showAdminSubmissions_(chatId, uid, arg === "published" ? "published" : arg === "queue" ? "queue" : "pending", Number(parts[3]) || 0, msgId); return; }
@@ -8479,6 +9204,30 @@ function handleMusicCallback_(cb) {
     showDraftLinksPanel_(chatId, uid, draft); return;
   }
   if (parts[1] === "links") { answerCallbackQuery_(cb.id); showDraftLinksPanel_(chatId, uid, draft); return; }
+  if (parts[1] === "alp" || parts[1] === "alm" || parts[1] === "als" || parts[1] === "alh" || parts[1] === "alsv" || parts[1] === "alno") {
+    handleDraftArtistLinkCallback_(cb, parts, draft);
+    return;
+  }
+  if (parts[1] === "ch" || parts[1] === "chok") {
+    const channelId = parts[3] || "";
+    if (parts[1] === "ch") {
+      const ch = getPublishChannelById_(channelId);
+      if (!ch) { answerCallbackQuery_(cb.id, "کانال نامعتبر"); return; }
+      const allowed = canUserPublishToChannel_(uid, ch);
+      if (!allowed.ok) { answerCallbackQuery_(cb.id, allowed.reason === "quota_end" ? t_(uid, "VIP_QUOTA_END", { q: vipInfoFor_(uid).quota }) : t_(uid, "VIP_REQUIRED")); return; }
+      if (!Array.isArray(draft.data.channels)) draft.data.channels = [];
+      const idx = draft.data.channels.map(String).indexOf(String(ch.id));
+      if (idx >= 0) draft.data.channels.splice(idx, 1); else draft.data.channels.push(String(ch.id));
+      saveMusicDraft_(draft);
+      answerCallbackQuery_(cb.id, ch.title + (idx >= 0 ? " حذف شد" : " انتخاب شد"));
+      sendDraftChannelPicker_(chatId, uid, draft, cb.message && cb.message.message_id);
+      return;
+    }
+    if (!Array.isArray(draft.data.channels) || !draft.data.channels.length) { answerCallbackQuery_(cb.id, "حداقل یک کانال انتخاب کن"); return; }
+    answerCallbackQuery_(cb.id, "✅");
+    advanceMusicStep_(chatId, uid, draft, { state: "MUSIC_CHANNELS", data: { draftId: draft.draftId } });
+    return;
+  }
   if (parts[1] === "cancel") { cancelMusicDraft_(uid, session); answerCallbackQuery_(cb.id, "لغو شد"); showUserMenu_(chatId, t_(uid, "CANCEL_FLOW")); return; }
   answerCallbackQuery_(cb.id, "نامعتبر");
 }
@@ -8664,6 +9413,102 @@ function handleAdminState_(message, session) {
   const requiredPermission = adminPermissionForState_(state, data);
   if (requiredPermission && !hasAdminPermission_(uid, requiredPermission)) { clearSession_("M:" + uid); sendMessage_(chatId, "⛔ نقش تو اجازهٔ این کار را ندارد.", adminKeyboard_()); return; }
   const finish = function(reply) { clearSession_("M:" + uid); showAdminMenu_(chatId, reply); };
+
+  // ── ۰.۱۳: اشتراک VIP ──
+  if (state === "ADM_VIP_PLAN_NEW") {
+    const parts = String(text || "").split("|").map(function(x) { return x.trim(); });
+    if (parts.length < 4 || !parts[0]) { sendMessage_(chatId, "قالب: نام | قیمت | روز | سهمیه | all یا شناسهٔ کانال‌ها | نشان", cancelKeyboard_()); return; }
+    const price = Number(normalizeDigits_(parts[1])); const days = Number(normalizeDigits_(parts[2])); const quota = Number(normalizeDigits_(parts[3]));
+    if (!(price >= 0) || !(days > 0) || !(quota > 0)) { sendMessage_(chatId, "قیمت/روز/سهمیه باید عدد مثبت باشند.", cancelKeyboard_()); return; }
+    const scopeRaw = String(parts[4] || "all").trim();
+    const isAll = /^all$/i.test(scopeRaw) || scopeRaw === "همه";
+    const channels = isAll ? [] : scopeRaw.split(/[,،\s]+/).filter(Boolean);
+    const badge = String(parts[5] || "").trim();
+    const id = newId_("PLAN");
+    savePlan_({ plan_id: id, name: parts[0], price: price, days: days, track_quota: quota, channel_scope: isAll ? "all" : "limited", channels_json: JSON.stringify(channels), badge: badge, active: "true", sort: getSubscriptionPlans_().length + 1 });
+    logAdminAction_(uid, "vip_plan_add", id, parts[0]);
+    clearSession_("M:" + uid);
+    showAdminPlanDetail_(chatId, uid, id);
+    return;
+  }
+  if (state === "ADM_VIP_PLAN_FIELD") {
+    const planId = String(data.planId || ""); const field = String(data.field || "");
+    const p = getPlanById_(planId);
+    if (!p) { finish("پلن پیدا نشد."); return; }
+    if (field === "price" || field === "days" || field === "quota") {
+      const n = Number(normalizeDigits_(text));
+      if (!(n >= 0)) { sendMessage_(chatId, "عدد مثبت بفرست:", cancelKeyboard_()); return; }
+      savePlan_({ plan_id: planId, price: field === "price" ? n : p.price, days: field === "days" ? n : p.days, track_quota: field === "quota" ? n : p.trackQuota });
+    } else if (field === "channels") {
+      const isAll = /^all$/i.test(text) || text === "همه";
+      const list = isAll ? [] : text.split(/[,،\s]+/).filter(Boolean);
+      savePlan_({ plan_id: planId, channel_scope: isAll ? "all" : "limited", channels_json: JSON.stringify(list) });
+    } else if (field === "badge") {
+      savePlan_({ plan_id: planId, badge: text.slice(0, 8) });
+    } else if (field === "name") {
+      if (String(text || "").length < 2) { sendMessage_(chatId, "نام معتبر بفرست:", cancelKeyboard_()); return; }
+      savePlan_({ plan_id: planId, name: truncate_(text, 40) });
+    } else { finish("فیلد نامعتبر."); return; }
+    logAdminAction_(uid, "vip_plan_edit", planId, field);
+    clearSession_("M:" + uid);
+    showAdminPlanDetail_(chatId, uid, planId);
+    return;
+  }
+  if (state === "ADM_VIP_REJECT") {
+    const note = text === "-" ? "" : truncate_(text, 180);
+    rejectPaymentRequest_(data.requestId || "", uid, note);
+    clearSession_("M:" + uid);
+    showAdminPaymentRequests_(chatId, uid);
+    return;
+  }
+  if (state === "ADM_VIP_GRANT_UID") {
+    const target = normalizeDigits_(text).replace(/[^0-9]/g, "");
+    if (!/^\d{4,20}$/.test(target)) { sendMessage_(chatId, "آیدی عددی معتبر بفرست:", cancelKeyboard_()); return; }
+    const plans = getSubscriptionPlans_().filter(function(p) { return p.active; });
+    if (!plans.length) { finish("هیچ پلن فعالی نیست؛ اول یک پلن بساز."); return; }
+    clearSession_("M:" + uid);
+    sendMessage_(chatId, "🎁 برای کاربر " + target + " کدام پلن فعال شود؟", { inline_keyboard: plans.map(function(p) { return [{ text: (p.badge ? p.badge + " " : "") + p.name + " · " + p.days + " روز", callback_data: "vipx:grantp:" + target + ":" + p.id }]; }) });
+    return;
+  }
+  if (state === "ADM_VIP_SET") {
+    const key = String(data.key || "");
+    if (["PAYMENT_CARD_NUMBER", "PAYMENT_CARD_HOLDER", "PAYMENT_INSTRUCTIONS"].indexOf(key) < 0) { finish("کلید نامعتبر."); return; }
+    setSetting_(key, text);
+    logAdminAction_(uid, "set", key, truncate_(text, 120));
+    clearSession_("M:" + uid);
+    showAdminSubscriptionsPanel_(chatId, uid);
+    sendMessage_(chatId, "✅ ثبت شد.");
+    return;
+  }
+  // ── ۰.۱۳: کانال‌های انتشار ──
+  if (state === "ADM_PCH_ADD") {
+    const channel = normalizeChannelId_(text);
+    if (!channel) { sendMessage_(chatId, "آیدی کانال معتبر نیست. مثال: @mychannel یا -1001234567890", cancelKeyboard_()); return; }
+    const info = telegramRequest_("getChat", { chat_id: channel });
+    if (!info || !info.ok) { sendMessage_(chatId, "❌ ربات به این کانال دسترسی ندارد. اول ربات را ادمین کن.\n" + String(info && info.description || ""), cancelKeyboard_()); return; }
+    const adminState = botAdminStatusIn_(channel);
+    if (adminState === false) { sendMessage_(chatId, "❌ ربات در این کانال ادمین نیست. اول ادمینش کن.", cancelKeyboard_()); return; }
+    const title = String(info.result.title || channel);
+    const username = info.result.username ? String(info.result.username) : "";
+    savePublishChannel_({ channel_id: channel, title: title, username: username, template: "classic", access: "paid", active: "true", sort: getPublishChannelRows_().length + 10 });
+    logAdminAction_(uid, "publish_channel_add", channel, title);
+    clearSession_("M:" + uid);
+    showPublishChannelDetail_(chatId, uid, channel);
+    return;
+  }
+  if (state === "ADM_PCH_FOOTER") {
+    const channelId = String(data.channelId || "");
+    if (channelId === "main") setSetting_("CHANNEL_FOOTER", text === "-" ? "" : text);
+    else {
+      const ch = getPublishChannelRows_().find(function(c) { return c.id === channelId; });
+      if (!ch) { finish("کانال پیدا نشد."); return; }
+      savePublishChannel_({ channel_id: ch.id, footer: text === "-" ? "" : text });
+    }
+    logAdminAction_(uid, "publish_channel_footer", channelId, truncate_(text, 80));
+    clearSession_("M:" + uid);
+    showPublishChannelDetail_(chatId, uid, channelId);
+    return;
+  }
 
   // ویرایش دستی اثر توسط مدیر (ADM_EDIT_TITLE / …_COVER / …_AUDIO / …)
   if (state.indexOf("ADM_EDIT_") === 0) { handleAdminEditState_(message, session); return; }
@@ -8889,6 +9734,7 @@ function handleAdminState_(message, session) {
       setSubmissionField_(sub.id, "status", "rejected");
       setSubmissionField_(sub.id, "reviewNote", note);
       setSubmissionField_(sub.id, "reviewedBy", uid);
+      setSubmissionChannelsStatus_(sub.id, "rejected");
     });
     logAdminAction_(uid, "sub_reject", sub.id, note);
     clearSession_("M:" + uid);
@@ -9529,15 +10375,33 @@ function handleAdminEditState_(message, session) {
 }
 // پاک‌کردن پست‌های قبلیِ کانال (برای انتشار دوباره بعد از تعویض رسانه)
 function deleteChannelPostMessages_(sub) {
-  const channel = normalizeChannelId_(getSetting_("CHANNEL_ID"));
-  if (!channel) return 0;
   const stage = parsePublishStage_(sub);
-  const ids = positiveIdList_(String(sub.visualMessageIds || "") + "|" + String(sub.audioMessageIds || ""));
-  if (stage && stage.captionMessageId) ids.push(Number(stage.captionMessageId));
-  const uniq = [];
-  ids.forEach(function(x) { if (Number(x) > 0 && uniq.indexOf(Number(x)) < 0) uniq.push(Number(x)); });
   let n = 0;
-  uniq.forEach(function(mid) { try { const r = deleteMessage_(channel, mid); if (r && r.ok !== false) n++; } catch (e) {} });
+  const seen = {};
+  const remove = function(chatId, mid) {
+    const key = String(chatId) + ":" + String(mid);
+    if (!chatId || !mid || seen[key]) return;
+    seen[key] = true;
+    try { const r = deleteMessage_(chatId, mid); if (r && r.ok !== false) n++; } catch (e) {}
+  };
+  if (stage && stage.channels) {
+    Object.keys(stage.channels).forEach(function(chId) {
+      const cs = stage.channels[chId] || {};
+      const chatId = cs.chatId || (getPublishChannelById_(chId) || {}).chatId;
+      (cs.visualMessageIds || []).forEach(function(mid) { remove(chatId, mid); });
+      (cs.audioMessageIds || []).forEach(function(mid) { remove(chatId, mid); });
+      if (cs.captionMessageId) remove(chatId, cs.captionMessageId);
+    });
+  }
+  const main = normalizeChannelId_(getSetting_("CHANNEL_ID"));
+  if (main) {
+    positiveIdList_(String(sub.visualMessageIds || "") + "|" + String(sub.audioMessageIds || "")).forEach(function(mid) { remove(main, mid); });
+    if (stage && stage.captionMessageId) remove(main, stage.captionMessageId);
+  }
+  if (main && String(sub.mode) === "freestyle") {
+    // پست‌های فری‌استایل قدیمی که فقط در ستون‌های اصلی ثبت شده‌اند
+    positiveIdList_(String(sub.visualMessageIds || "")).forEach(function(mid) { remove(main, mid); });
+  }
   return n;
 }
 // بعد از هر ویرایش مدیر: لاگ، اطلاع به هنرمند، و اعمال روی کانال
@@ -9567,9 +10431,8 @@ function afterAdminEdit_(chatId, uid, sub, field, label, mediaChanged) {
       sendMessage_(chatId, "✅ " + label + "\n" + (removed ? "🗑 " + removed + " پیام قبلی از کانال پاک شد.\n" : "") +
         (okPub ? "🚀 پست با رسانهٔ جدید دوباره در کانال منتشر شد." : "⚠️ انتشار دوباره ناموفق بود — از «🚀 انتشار فوری» در جزئیات اثر تلاش کن."));
     } else {
-      const channel = normalizeChannelId_(getSetting_("CHANNEL_ID"));
       let okEdit = false;
-      try { okEdit = !!channel && tryEditPublishedPost_(fresh, channel); } catch (e) { logError_("afterAdminEdit_.editPost", e, { submissionId: id }); }
+      try { okEdit = !!editPublishedChannels_(fresh); } catch (e) { logError_("afterAdminEdit_.editPost", e, { submissionId: id }); }
       sendMessage_(chatId, "✅ " + label + "\n" + (okEdit ? "🔄 پست زندهٔ کانال به‌روز شد." : "⚠️ پست کانال ویرایش نشد (شاید پاک شده باشد) — «🚀 انتشار فوری» را بزن."));
     }
   } else {
@@ -10308,4 +11171,1410 @@ function handleCcPostsCallback_(cb) {
   }
   answerCallbackQuery_(cb.id);
   showCcPostsList_(chatId, uid, 0, "all");
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  ۰.۱۳ — انتشار چندکاناله، قالب‌های پست، اشتراک VIP و لینک‌های هنرمند
+// ═════════════════════════════════════════════════════════════════════════════
+// این بخش روی همان Sheets و همان موتور انتشار سوار می‌شود:
+//   • PublishChannels   → فهرست کانال‌های انتشار (هر کانال یک قالب و یک دسترسی دارد)
+//   • PostTemplates     → ۵ قالب آماده که مدیر برای هر کانال انتخاب می‌کند
+//   • SubscriptionPlans → پلن‌های اشتراک (قیمت/مدت/سهمیه/کانال‌ها) — کامل قابل ویرایش
+//   • Subscriptions     → اشتراک فعال هر هنرمند + سهمیهٔ مصرف‌شده
+//   • PaymentRequests   → درخواست‌های پرداخت با تأیید/رد مدیر
+//   • ArtistLinks       → نسخهٔ فعلی لینک هر پلتفرم
+//   • ArtistLinksHistory→ همهٔ نسخه‌های قبلی (هیچ‌وقت حذف نمی‌شوند)
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ───────────────────────── قالب‌های آمادهٔ پست ─────────────────────────
+// cover: پست کاور دارد؟  audio: none | preview | full   linksButton: دکمه‌های لینک زیر پست
+const POST_TEMPLATES_ = {
+  classic: {
+    key: "classic", cover: true, audio: "preview", downloadOnCover: false, linkButtons: false,
+    labelKey: "POST_TEMPLATE_CLASSIC", desc: "کاور + توضیحات و عوامل + برش ۳۰ ثانیه‌ای با دکمهٔ دانلود (قالب رپ‌ایویلز)"
+  },
+  story: {
+    key: "story", cover: true, audio: "none", downloadOnCover: true, linkButtons: true,
+    labelKey: "POST_TEMPLATE_STORY", desc: "فقط کاور + داستان/توضیحات هنرمند + دکمهٔ دانلود موزیک زیر همان پست"
+  },
+  audio_only: {
+    key: "audio_only", cover: false, audio: "preview", downloadOnCover: false, linkButtons: false,
+    labelKey: "POST_TEMPLATE_AUDIO_ONLY", desc: "بدون کاور؛ فقط فایل صوتی ۳۰ ثانیه‌ای و زیرش دکمهٔ دانلود"
+  },
+  full_track: {
+    key: "full_track", cover: false, audio: "full", downloadOnCover: false, linkButtons: false,
+    labelKey: "POST_TEMPLATE_FULL_TRACK", desc: "بدون کاور؛ کل آهنگ (نه فقط ۳۰ ثانیه) با دکمهٔ دانلود"
+  },
+  vip: {
+    key: "vip", cover: true, audio: "preview", downloadOnCover: true, linkButtons: true, premium: true,
+    labelKey: "POST_TEMPLATE_VIP", desc: "قالب ویژهٔ VIP: کاور + ایموجی/نشان پریمیوم + لینک هنرمند + برش صوتی"
+  }
+};
+function postTemplateKeys_() { return Object.keys(POST_TEMPLATES_); }
+function normalizeTemplateKey_(key) {
+  const k = String(key || "").trim().toLowerCase();
+  return POST_TEMPLATES_[k] ? k : "classic";
+}
+function postTemplateMeta_(key) { return POST_TEMPLATES_[normalizeTemplateKey_(key)]; }
+function postTemplateLabel_(key) { return t_("", postTemplateMeta_(key).labelKey); }
+function postTemplateListText_() {
+  return postTemplateKeys_().map(function(k) { const m = POST_TEMPLATES_[k]; return "• " + t_("", m.labelKey) + " — " + m.desc; }).join("\n");
+}
+
+// ───────────────────────── کمکی‌های شیت ─────────────────────────
+function readSheetObjects_(sheetName, headers) {
+  const sh = getSheet_(sheetName);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const width = Math.max(headers.length, sh.getLastColumn());
+  const values = sh.getRange(2, 1, sh.getLastRow() - 1, width).getValues();
+  return values.map(function(r, i) {
+    const o = { rowNumber: i + 2 };
+    headers.forEach(function(h, j) { o[h] = r[j]; });
+    return o;
+  });
+}
+function rewriteSheetRows_(sheetName, headers, rows) {
+  const sh = getSheet_(sheetName);
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, Math.max(headers.length, sh.getLastColumn())).clearContent();
+  if (!rows || !rows.length) return;
+  sh.getRange(2, 1, rows.length, headers.length).setValues(rows.map(function(o) {
+    return headers.map(function(h) { return o[h] == null ? "" : o[h]; });
+  }));
+}
+
+// ───────────────────────── کانال‌های انتشار ─────────────────────────
+function mainPublishChannel_() {
+  const chatId = normalizeChannelId_(getSetting_("CHANNEL_ID"));
+  if (!chatId) return null;
+  return {
+    id: "main", chatId: chatId, title: "کانال اصلی", username: "", isMain: true, active: true,
+    template: normalizeTemplateKey_(getSetting_("MAIN_CHANNEL_TEMPLATE")),
+    access: String(getSetting_("MAIN_CHANNEL_ACCESS") || "free") === "paid" ? "paid" : "free",
+    footer: String(getSetting_("CHANNEL_FOOTER") || ""), priceLabel: "", sort: 0
+  };
+}
+function getPublishChannelRows_() {
+  if (PUBLISH_CHANNELS_MEMO_ !== null) return PUBLISH_CHANNELS_MEMO_;
+  PUBLISH_CHANNELS_MEMO_ = readSheetObjects_(APP.SHEETS.PUBLISH_CHANNELS, HEADERS.PublishChannels).map(function(r) {
+    return {
+      rowNumber: r.rowNumber,
+      id: String(r.channel_id || "").trim(),
+      chatId: normalizeChannelId_(r.channel_id),
+      title: String(r.title || r.channel_id || ""),
+      username: String(r.username || "").replace(/^@/, ""),
+      template: normalizeTemplateKey_(r.template),
+      access: String(r.access || "paid") === "free" ? "free" : "paid",
+      footer: String(r.footer || ""),
+      priceLabel: String(r.price_label || ""),
+      active: String(r.active).toLowerCase() !== "false",
+      sort: Number(r.sort) || 100,
+      createdAt: r.created_at || "", updatedAt: r.updated_at || ""
+    };
+  }).filter(function(r) { return r.id && r.chatId; }).sort(function(a, b) { return a.sort - b.sort; });
+  return PUBLISH_CHANNELS_MEMO_;
+}
+function bustPublishChannelsCache_() { PUBLISH_CHANNELS_MEMO_ = null; }
+function getPublishChannelById_(id) {
+  const key = String(id || "");
+  if (key === "main") return mainPublishChannel_();
+  return getPublishChannelRows_().find(function(c) { return c.id === key || c.chatId === key; }) || null;
+}
+function activePublishChannels_() {
+  const out = [];
+  if (String(getSetting_("MULTI_CHANNEL_ENABLED") || "true") !== "true") {
+    const main = mainPublishChannel_();
+    return main ? [main] : [];
+  }
+  const main = mainPublishChannel_();
+  if (main) out.push(main);
+  getPublishChannelRows_().forEach(function(c) {
+    if (!c.active) return;
+    if (out.some(function(x) { return x.chatId === c.chatId; })) return;
+    out.push(c);
+  });
+  return out;
+}
+function savePublishChannel_(rec) {
+  const sh = getSheet_(APP.SHEETS.PUBLISH_CHANNELS);
+  const rows = readSheetObjects_(APP.SHEETS.PUBLISH_CHANNELS, HEADERS.PublishChannels);
+  const now = new Date();
+  const id = String(rec.channel_id || "").trim();
+  const existing = rows.find(function(r) { return String(r.channel_id) === id; });
+  const obj = {
+    channel_id: id,
+    title: rec.title || existing && existing.title || id,
+    username: String(rec.username || existing && existing.username || "").replace(/^@/, ""),
+    template: normalizeTemplateKey_(rec.template || existing && existing.template),
+    access: String(rec.access || existing && existing.access || "paid") === "free" ? "free" : "paid",
+    footer: rec.footer != null ? rec.footer : (existing && existing.footer || ""),
+    price_label: rec.price_label != null ? rec.price_label : (existing && existing.price_label || ""),
+    active: rec.active != null ? String(rec.active) : String(existing && existing.active != null ? existing.active : "true"),
+    sort: rec.sort != null ? rec.sort : (existing && existing.sort || 100),
+    created_at: existing && existing.created_at || now,
+    updated_at: now
+  };
+  if (existing) {
+    const range = sh.getRange(existing.rowNumber, 1, 1, HEADERS.PublishChannels.length);
+    range.setValues([HEADERS.PublishChannels.map(function(h) { return obj[h] == null ? "" : obj[h]; })]);
+  } else {
+    appendRowObject_(APP.SHEETS.PUBLISH_CHANNELS, HEADERS.PublishChannels, obj);
+  }
+  bustPublishChannelsCache_();
+  return obj;
+}
+function deletePublishChannel_(id) {
+  const key = String(id || "");
+  const rows = readSheetObjects_(APP.SHEETS.PUBLISH_CHANNELS, HEADERS.PublishChannels);
+  const keep = rows.filter(function(r) { return String(r.channel_id) !== key; });
+  rewriteSheetRows_(APP.SHEETS.PUBLISH_CHANNELS, HEADERS.PublishChannels, keep);
+  bustPublishChannelsCache_();
+}
+function ensureLegacyDestinationsMigrated_() {
+  const legacy = publishDestinations_();
+  if (!legacy.length) return 0;
+  let added = 0;
+  const existing = getPublishChannelRows_();
+  legacy.forEach(function(d) {
+    if (existing.some(function(c) { return c.chatId === normalizeChannelId_(d.id); })) return;
+    const info = telegramRequest_("getChat", { chat_id: d.id });
+    const username = info && info.ok && info.result && info.result.username ? String(info.result.username) : "";
+    savePublishChannel_({ channel_id: d.id, title: info && info.ok && info.result && info.result.title || d.id, username: username, template: "audio_only", access: "free", footer: d.footer || "", active: "true" });
+    added++;
+  });
+  return added;
+}
+function channelTelegramTarget_(ch) {
+  if (!ch) return getChannelTelegramTarget_();
+  if (ch.isMain) return getChannelTelegramTarget_();
+  let username = String(ch.username || "").replace(/^@/, "");
+  if (!username && /^-100\d+$/.test(String(ch.chatId))) {
+    try {
+      const info = telegramRequest_("getChat", { chat_id: ch.chatId });
+      if (info && info.ok && info.result && info.result.username) username = String(info.result.username);
+    } catch (e) {}
+  }
+  if (!username) return null;
+  return { url: "https://t.me/" + username, label: "Telegram · @" + username };
+}
+function channelAccessLabel_(ch) {
+  if (!ch) return "";
+  if (ch.access === "free") return "رایگان";
+  return String(getSetting_("POST_VIP_BADGE") || "💎 VIP");
+}
+
+// ───────────────────────── پلن‌ها و اشتراک ─────────────────────────
+function getSubscriptionPlans_() {
+  if (PLANS_MEMO_ !== null) return PLANS_MEMO_;
+  let rows = readSheetObjects_(APP.SHEETS.PLANS, HEADERS.SubscriptionPlans);
+  if (!rows.length) {
+    // پلن‌های پیش‌فرض: مدیر همه را از پنل قابل ویرایش دارد.
+    const now = new Date();
+    const defaults = [
+      { plan_id: "PLAN_BASIC", name: "پایه", price: 150000, days: 30, track_quota: 3, channel_scope: "limited", channels_json: "[]", badge: "🥉", active: "true", sort: 1, created_at: now },
+      { plan_id: "PLAN_PRO", name: "پرو", price: 300000, days: 30, track_quota: 6, channel_scope: "limited", channels_json: "[]", badge: "🥈", active: "true", sort: 2, created_at: now },
+      { plan_id: "PLAN_VIP", name: "VIP", price: 600000, days: 30, track_quota: 30, channel_scope: "all", channels_json: "[]", badge: "💎", active: "true", sort: 3, created_at: now }
+    ];
+    const sh = getSheet_(APP.SHEETS.PLANS);
+    sh.getRange(2, 1, defaults.length, HEADERS.SubscriptionPlans.length).setValues(defaults.map(function(o) { return HEADERS.SubscriptionPlans.map(function(h) { return o[h] == null ? "" : o[h]; }); }));
+    rows = readSheetObjects_(APP.SHEETS.PLANS, HEADERS.SubscriptionPlans);
+  }
+  PLANS_MEMO_ = rows.map(function(r) {
+    return {
+      rowNumber: r.rowNumber, id: String(r.plan_id || ""), name: String(r.name || r.plan_id || ""),
+      price: Number(r.price) || 0, days: Math.max(1, Number(r.days) || 30),
+      trackQuota: Math.max(1, Number(r.track_quota) || 3),
+      channelScope: String(r.channel_scope || "limited") === "all" ? "all" : "limited",
+      channels: (function(v) { try { const a = JSON.parse(v || "[]"); return Array.isArray(a) ? a.map(String) : []; } catch (e) { return String(v || "").split(/[,،\s]+/).filter(Boolean); } })(r.channels_json),
+      badge: String(r.badge || ""), active: String(r.active).toLowerCase() !== "false",
+      sort: Number(r.sort) || 100
+    };
+  }).filter(function(p) { return p.id; }).sort(function(a, b) { return a.sort - b.sort; });
+  return PLANS_MEMO_;
+}
+function bustPlansCache_() { PLANS_MEMO_ = null; }
+function getPlanById_(id) { return getSubscriptionPlans_().find(function(p) { return p.id === String(id); }) || null; }
+function savePlan_(obj) {
+  const sh = getSheet_(APP.SHEETS.PLANS);
+  const rows = readSheetObjects_(APP.SHEETS.PLANS, HEADERS.SubscriptionPlans);
+  const now = new Date();
+  const id = String(obj.plan_id || "").trim();
+  const existing = rows.find(function(r) { return String(r.plan_id) === id; });
+  const out = {
+    plan_id: id, name: obj.name || existing && existing.name || id,
+    price: obj.price != null ? Number(obj.price) : Number(existing && existing.price) || 0,
+    days: obj.days != null ? Number(obj.days) : Number(existing && existing.days) || 30,
+    track_quota: obj.track_quota != null ? Number(obj.track_quota) : Number(existing && existing.track_quota) || 3,
+    channel_scope: obj.channel_scope || existing && existing.channel_scope || "limited",
+    channels_json: obj.channels_json != null ? obj.channels_json : (existing && existing.channels_json || "[]"),
+    badge: obj.badge != null ? obj.badge : (existing && existing.badge || ""),
+    active: obj.active != null ? String(obj.active) : String(existing && existing.active != null ? existing.active : "true"),
+    sort: obj.sort != null ? obj.sort : (existing && existing.sort || 100),
+    created_at: existing && existing.created_at || now
+  };
+  if (existing) sh.getRange(existing.rowNumber, 1, 1, HEADERS.SubscriptionPlans.length).setValues([HEADERS.SubscriptionPlans.map(function(h) { return out[h] == null ? "" : out[h]; })]);
+  else appendRowObject_(APP.SHEETS.PLANS, HEADERS.SubscriptionPlans, out);
+  bustPlansCache_();
+  return out;
+}
+function deletePlan_(id) {
+  const rows = readSheetObjects_(APP.SHEETS.PLANS, HEADERS.SubscriptionPlans).filter(function(r) { return String(r.plan_id) !== String(id); });
+  rewriteSheetRows_(APP.SHEETS.PLANS, HEADERS.SubscriptionPlans, rows);
+  bustPlansCache_();
+}
+function getSubscriptions_() {
+  if (SUBSCRIPTIONS_MEMO_ !== null) return SUBSCRIPTIONS_MEMO_;
+  SUBSCRIPTIONS_MEMO_ = readSheetObjects_(APP.SHEETS.SUBSCRIPTIONS, HEADERS.Subscriptions).map(function(r) {
+    let channels = [];
+    try { const a = JSON.parse(r.channels_json || "[]"); channels = Array.isArray(a) ? a.map(String) : []; } catch (e) { channels = String(r.channels_json || "").split(/[,،\s]+/).filter(Boolean); }
+    return {
+      rowNumber: r.rowNumber, id: String(r.subscription_id || ""), userId: String(r.user_id || ""),
+      planId: String(r.plan_id || ""), status: String(r.status || "pending"),
+      slotsTotal: Number(r.slots_total) || 0, slotsUsed: Number(r.slots_used) || 0,
+      periodStart: r.period_start || "", expiresAt: r.expires_at || "", channels: channels,
+      grantedBy: String(r.granted_by || ""), paymentId: String(r.payment_id || ""),
+      note: String(r.note || ""), createdAt: r.created_at || "", updatedAt: r.updated_at || ""
+    };
+  }).filter(function(s) { return s.id; });
+  return SUBSCRIPTIONS_MEMO_;
+}
+function bustSubscriptionsCache_() { SUBSCRIPTIONS_MEMO_ = null; }
+function activeSubscription_(userId) {
+  const now = nowMs_();
+  const list = getSubscriptions_().filter(function(s) {
+    return s.userId === String(userId) && s.status === "active" && dateMillis_(s.expiresAt) > now;
+  }).sort(function(a, b) { return dateMillis_(b.expiresAt) - dateMillis_(a.expiresAt); });
+  return list[0] || null;
+}
+function allSubmissionChannelRows_() {
+  if (SUBMISSION_CHANNELS_MEMO_ !== null) return SUBMISSION_CHANNELS_MEMO_;
+  try { SUBMISSION_CHANNELS_MEMO_ = readSheetObjects_(APP.SHEETS.SUBMISSION_CHANNELS, HEADERS.SubmissionChannels); }
+  catch (e) { SUBMISSION_CHANNELS_MEMO_ = []; }
+  return SUBMISSION_CHANNELS_MEMO_;
+}
+function subscriptionQuotaUsed_(sub) {
+  if (!sub) return {};
+  try {
+    return allSubmissionChannelRows_().filter(function(r) {
+      if (String(r.access) !== "paid") return false;
+      if (String(r.status) === "rejected") return false;
+      return dateMillis_(r.created_at) >= dateMillis_(sub.periodStart || sub.createdAt);
+    }).reduce(function(ids, r) { ids[String(r.submission_id)] = true; return ids; }, {});
+  } catch (e) { return {}; }
+}
+function subscriptionUsageCount_(sub) {
+  const used = subscriptionQuotaUsed_(sub);
+  return Object.keys(used || {}).length;
+}
+function vipInfoFor_(userId) {
+  const sub = activeSubscription_(userId);
+  if (!sub) return { active: false, sub: null, plan: null, channels: [], quota: 0, used: 0 };
+  const plan = getPlanById_(sub.planId);
+  let scope = null; // null = همهٔ کانال‌ها
+  if (plan && plan.channelScope !== "all") {
+    const listed = (sub.channels && sub.channels.length) ? sub.channels : ((plan.channels && plan.channels.length) ? plan.channels : []);
+    // پلن محدود بدون فهرست کانال، فقط کانال اصلی را باز می‌کند (نه همهٔ کانال‌ها).
+    scope = listed.length ? listed : ["main"];
+  }
+  return {
+    active: true, sub: sub, plan: plan,
+    channels: scope,
+    quota: Number(sub.slotsTotal) || (plan && plan.trackQuota) || 0,
+    used: subscriptionUsageCount_(sub)
+  };
+}
+function isVipUser_(userId) { return String(getSetting_("VIP_ENABLED") || "true") === "true" && vipInfoFor_(userId).active; }
+function channelAllowedByVip_(userId, ch) {
+  if (!ch || ch.access === "free") return true;
+  if (String(getSetting_("VIP_ENABLED") || "true") !== "true") return true; // سیستم خاموش = همه‌چیز باز
+  const info = vipInfoFor_(userId);
+  if (!info.active) return false;
+  if (!info.channels) return true; // scope = all
+  return info.channels.indexOf(String(ch.id)) >= 0 || info.channels.indexOf(String(ch.chatId)) >= 0;
+}
+function canUserPublishToChannel_(userId, ch) {
+  if (!ch) return { ok: false, reason: "channel_missing" };
+  if (isAdmin_(userId)) return { ok: true };
+  if (ch.access === "free") return { ok: true };
+  if (String(getSetting_("VIP_ENABLED") || "true") !== "true") return { ok: true };
+  const info = vipInfoFor_(userId);
+  if (!info.active) return { ok: false, reason: "vip_required" };
+  if (info.channels && info.channels.indexOf(String(ch.id)) < 0 && info.channels.indexOf(String(ch.chatId)) < 0) return { ok: false, reason: "plan_channel" };
+  if (info.quota > 0 && info.used >= info.quota) return { ok: false, reason: "quota_end" };
+  return { ok: true };
+}
+function eligibleChannelsForUser_(userId) {
+  return activePublishChannels_().filter(function(ch) { return canUserPublishToChannel_(userId, ch).ok; });
+}
+function channelSelectionMode_() { return String(getSetting_("CHANNEL_SELECTION_MODE") || "admin") === "user" ? "user" : "admin"; }
+function channelSelectionStepEnabled_() {
+  return String(getSetting_("MULTI_CHANNEL_ENABLED") || "true") === "true" && activePublishChannels_().length > 1;
+}
+function defaultChannelIdsForUser_(userId) {
+  const all = activePublishChannels_();
+  const raw = String(getSetting_("DEFAULT_PUBLISH_CHANNELS") || "free").trim();
+  let ids;
+  if (/^all$/i.test(raw)) ids = all.map(function(c) { return c.id; });
+  else if (/^free$/i.test(raw)) ids = all.filter(function(c) { return c.access === "free"; }).map(function(c) { return c.id; });
+  else ids = raw.split(/[,،\s]+/).filter(Boolean);
+  let picked = all.filter(function(c) { return ids.indexOf(c.id) >= 0 || ids.indexOf(c.chatId) >= 0; });
+  const allowed = picked.filter(function(c) { return canUserPublishToChannel_(userId, c).ok; });
+  if (allowed.length) return allowed;
+  // هیچ کانال مجازی نبود: حداقل کانال رایگان (یا اصلی) تا انتشار کاملاً قفل نشود
+  const free = all.filter(function(c) { return c.access === "free"; });
+  return free.length ? [free[0]] : (all.length ? [all[0]] : []);
+}
+function submissionSelectedChannelIds_(sub) {
+  const details = (sub && sub.request && sub.request.details) || {};
+  if (Array.isArray(details.channels) && details.channels.length) return details.channels.map(String);
+  try {
+    const col = sub && sub.channelsJson ? sub.channelsJson : "";
+    const a = JSON.parse(col || "[]");
+    if (Array.isArray(a) && a.length) return a.map(String);
+  } catch (e) {}
+  return [];
+}
+function resolveSubmissionChannels_(sub) {
+  const all = activePublishChannels_();
+  if (!all.length) return [];
+  const selected = submissionSelectedChannelIds_(sub);
+  let picked = selected.length
+    ? all.filter(function(c) { return selected.indexOf(String(c.id)) >= 0 || selected.indexOf(String(c.chatId)) >= 0; })
+    : defaultChannelIdsForUser_(sub.userId);
+  picked = picked.filter(function(c) { return canUserPublishToChannel_(sub.userId, c).ok; });
+  if (!picked.length && !selected.length) {
+    // فقط وقتی خودِ هنرمند/مدیر کانالی انتخاب نکرده، به کانال رایگان برمی‌گردیم؛
+    // انتخاب صریح هرگز بی‌صدا به کانال دیگری تغییر نمی‌کند.
+    const free = all.filter(function(c) { return c.access === "free"; });
+    picked = free.length ? [free[0]] : [];
+  }
+  return picked;
+}
+function channelEntitlementError_(userId, channels) {
+  if (!channels.length) return t_(userId, "CHANNEL_NONE_AVAILABLE");
+  const blocked = channels.filter(function(c) { return !canUserPublishToChannel_(userId, c).ok; });
+  if (!blocked.length) return "";
+  const infos = blocked.map(function(c) { return canUserPublishToChannel_(userId, c).reason; });
+  if (infos.indexOf("quota_end") >= 0) { const info = vipInfoFor_(userId); return t_(userId, "VIP_QUOTA_END", { q: info.quota }); }
+  return t_(userId, "VIP_REQUIRED");
+}
+function grantSubscription_(userId, planId, adminId, note, paymentId) {
+  const plan = getPlanById_(planId);
+  if (!plan) return null;
+  const now = new Date();
+  const existing = activeSubscription_(userId);
+  const id = newId_("SUB");
+  const baseMs = existing ? Math.max(nowMs_(), dateMillis_(existing.expiresAt)) : nowMs_();
+  const expires = new Date(baseMs + plan.days * 86400000);
+  const sh = getSheet_(APP.SHEETS.SUBSCRIPTIONS);
+  const channelsJson = JSON.stringify(plan.channelScope === "all" ? [] : plan.channels);
+  const slotsUsed = existing ? Number(existing.slotsUsed) || 0 : 0;
+  sh.appendRow([id, String(userId), plan.id, "active", plan.trackQuota, 0, now, expires, channelsJson, String(adminId || ""), String(paymentId || ""), String(note || ""), now, now]);
+  if (existing) setSubscriptionStatus_(existing.id, "extended", "تمدید با پلن " + plan.name + " — اعتبار قبلی حفظ شد");
+  bustSubscriptionsCache_();
+  return { id: id, plan: plan, expiresAt: expires };
+}
+function setSubscriptionStatus_(id, status, note) {
+  const sub = getSubscriptions_().find(function(s) { return s.id === String(id); });
+  if (!sub) return false;
+  const sh = getSheet_(APP.SHEETS.SUBSCRIPTIONS);
+  sh.getRange(sub.rowNumber, 4).setValue(String(status || "active"));
+  if (note != null) sh.getRange(sub.rowNumber, 12).setValue(String(note).slice(0, 300));
+  sh.getRange(sub.rowNumber, 14).setValue(new Date());
+  bustSubscriptionsCache_();
+  return true;
+}
+function revokeSubscription_(userId, adminId) {
+  const sub = activeSubscription_(userId);
+  if (!sub) return false;
+  setSubscriptionStatus_(sub.id, "revoked", "لغو توسط مدیر " + String(adminId || ""));
+  return true;
+}
+function subscriptionChannelsLabel_(info) {
+  if (!info.active) return "—";
+  if (!info.channels) return "همهٔ کانال‌ها (نامحدود)";
+  // عمداً نام/تعداد کانال‌های مقصد به هنرمند نشان داده نمی‌شود؛ فقط «کانال‌های منتخب».
+  return "کانال‌های منتخب";
+}
+function getPaymentRequests_() {
+  if (PAYMENT_REQUESTS_MEMO_ !== null) return PAYMENT_REQUESTS_MEMO_;
+  PAYMENT_REQUESTS_MEMO_ = readSheetObjects_(APP.SHEETS.PAYMENT_REQUESTS, HEADERS.PaymentRequests).map(function(r) {
+    return {
+      rowNumber: r.rowNumber, id: String(r.request_id || ""), userId: String(r.user_id || ""),
+      planId: String(r.plan_id || ""), planName: String(r.plan_name || ""), amount: Number(r.amount) || 0,
+      refCode: String(r.ref_code || ""), receiptFileId: String(r.receipt_file_id || ""),
+      status: String(r.status || "pending"), adminNote: String(r.admin_note || ""),
+      createdAt: r.created_at || "", reviewedBy: String(r.reviewed_by || ""), reviewedAt: r.reviewed_at || ""
+    };
+  }).filter(function(r) { return r.id; });
+  return PAYMENT_REQUESTS_MEMO_;
+}
+function bustPaymentRequestsCache_() { PAYMENT_REQUESTS_MEMO_ = null; }
+function createPaymentRequest_(userId, plan, refCode, receiptFileId) {
+  const id = newId_("PAY");
+  appendRowObject_(APP.SHEETS.PAYMENT_REQUESTS, HEADERS.PaymentRequests, {
+    request_id: id, user_id: String(userId), plan_id: plan.id, plan_name: plan.name,
+    amount: plan.price, ref_code: String(refCode || "").slice(0, 200), receipt_file_id: String(receiptFileId || ""),
+    status: "pending", admin_note: "", created_at: new Date(), reviewed_by: "", reviewed_at: ""
+  });
+  bustPaymentRequestsCache_();
+  return id;
+}
+function setPaymentRequestStatus_(id, status, adminId, note) {
+  const req = getPaymentRequests_().find(function(r) { return r.id === String(id); });
+  if (!req) return false;
+  const sh = getSheet_(APP.SHEETS.PAYMENT_REQUESTS);
+  sh.getRange(req.rowNumber, 8).setValue(String(status));
+  sh.getRange(req.rowNumber, 9).setValue(String(note || "").slice(0, 300));
+  sh.getRange(req.rowNumber, 11).setValue(String(adminId || ""));
+  sh.getRange(req.rowNumber, 12).setValue(new Date());
+  bustPaymentRequestsCache_();
+  return true;
+}
+
+// ───────────────────────── لینک‌های هنرمند (با تاریخچه) ─────────────────────────
+function artistLinkPlatforms_() {
+  const raw = String(getSetting_("ARTIST_LINK_PLATFORMS") || "instagram,soundcloud,youtube,telegram,spotify");
+  const keys = raw.split(/[\s,،]+/).map(function(x) { return x.trim().toLowerCase(); }).filter(Boolean);
+  const valid = keys.filter(function(k) { return POST_LINK_PLATFORMS.some(function(p) { return p.key === k; }); });
+  return valid.length ? valid : ["instagram", "soundcloud", "youtube", "telegram", "spotify"];
+}
+function loadArtistLinks_() {
+  if (ARTIST_LINKS_MEMO_ !== null) return;
+  ARTIST_LINKS_MEMO_ = readSheetObjects_(APP.SHEETS.ARTIST_LINKS, HEADERS.ArtistLinks).map(function(r) {
+    return { rowNumber: r.rowNumber, userId: String(r.user_id || ""), platform: String(r.platform || ""), url: String(r.url || ""), version: Number(r.version) || 1, source: String(r.source || ""), updatedAt: r.updated_at || "" };
+  }).filter(function(r) { return r.userId && r.platform && r.url; });
+}
+function bustArtistLinksCache_() { ARTIST_LINKS_MEMO_ = null; ARTIST_LINKS_HISTORY_MEMO_ = null; }
+function getArtistLinks_(userId) {
+  loadArtistLinks_();
+  return ARTIST_LINKS_MEMO_.filter(function(r) { return r.userId === String(userId); });
+}
+function getArtistLink_(userId, platform) {
+  return getArtistLinks_(userId).find(function(r) { return r.platform === String(platform); }) || null;
+}
+function loadArtistLinkHistory_() {
+  if (ARTIST_LINKS_HISTORY_MEMO_ !== null) return;
+  ARTIST_LINKS_HISTORY_MEMO_ = readSheetObjects_(APP.SHEETS.ARTIST_LINKS_HISTORY, HEADERS.ArtistLinksHistory).map(function(r) {
+    return { userId: String(r.user_id || ""), platform: String(r.platform || ""), version: Number(r.version) || 1, url: String(r.url || ""), source: String(r.source || ""), archivedAt: r.archived_at || "", reason: String(r.reason || "") };
+  }).filter(function(r) { return r.userId && r.platform; });
+}
+function getArtistLinkHistory_(userId, platform) {
+  loadArtistLinkHistory_();
+  return ARTIST_LINKS_HISTORY_MEMO_
+    .filter(function(r) { return r.userId === String(userId) && (!platform || r.platform === String(platform)); })
+    .sort(function(a, b) { return b.version - a.version; });
+}
+function saveArtistLink_(userId, platform, url, source, reason) {
+  const key = String(platform || "").toLowerCase();
+  const clean = normalizeUrl_(url);
+  if (!clean) return { ok: false, error: "bad_url" };
+  loadArtistLinks_(); loadArtistLinkHistory_();
+  const current = ARTIST_LINKS_MEMO_.filter(function(r) { return r.userId === String(userId) && r.platform === key; });
+  const hist = ARTIST_LINKS_HISTORY_MEMO_.filter(function(r) { return r.userId === String(userId) && r.platform === key; });
+  let maxVersion = 0;
+  current.forEach(function(r) { maxVersion = Math.max(maxVersion, r.version || 1); });
+  hist.forEach(function(r) { maxVersion = Math.max(maxVersion, r.version || 1); });
+  const nextVersion = maxVersion + 1;
+  const now = new Date();
+  // همهٔ نسخه‌های قبلی به شیت تاریخچه می‌روند؛ هیچ‌چیز حذف نمی‌شود.
+  const histSh = getSheet_(APP.SHEETS.ARTIST_LINKS_HISTORY);
+  const histRows = current.map(function(r) { return HEADERS.ArtistLinksHistory.map(function(h) { return ({ user_id: r.userId, platform: r.platform, version: r.version, url: r.url, source: r.source, archived_at: now, reason: String(reason || "replaced") })[h] == null ? "" : ({ user_id: r.userId, platform: r.platform, version: r.version, url: r.url, source: r.source, archived_at: now, reason: String(reason || "replaced") })[h]; }); });
+  if (histRows.length) histSh.getRange(histSh.getLastRow() + 1, 1, histRows.length, HEADERS.ArtistLinksHistory.length).setValues(histRows);
+  const keep = ARTIST_LINKS_MEMO_.filter(function(r) { return !(r.userId === String(userId) && r.platform === key); }).map(function(r) { return { user_id: r.userId, platform: r.platform, url: r.url, version: r.version, source: r.source, updated_at: r.updatedAt }; });
+  keep.push({ user_id: String(userId), platform: key, url: clean, version: nextVersion, source: String(source || "manual"), updated_at: now });
+  rewriteSheetRows_(APP.SHEETS.ARTIST_LINKS, HEADERS.ArtistLinks, keep);
+  bustArtistLinksCache_();
+  return { ok: true, version: nextVersion, url: clean };
+}
+function removeArtistLink_(userId, platform, reason) {
+  const key = String(platform || "").toLowerCase();
+  loadArtistLinks_(); loadArtistLinkHistory_();
+  const current = ARTIST_LINKS_MEMO_.filter(function(r) { return r.userId === String(userId) && r.platform === key; });
+  if (!current.length) return false;
+  const now = new Date();
+  const histSh = getSheet_(APP.SHEETS.ARTIST_LINKS_HISTORY);
+  const rows = current.map(function(r) { return [r.userId, r.platform, r.version, r.url, r.source, now, String(reason || "deleted")]; });
+  histSh.getRange(histSh.getLastRow() + 1, 1, rows.length, HEADERS.ArtistLinksHistory.length).setValues(rows);
+  const keep = ARTIST_LINKS_MEMO_.filter(function(r) { return !(r.userId === String(userId) && r.platform === key); }).map(function(r) { return { user_id: r.userId, platform: r.platform, url: r.url, version: r.version, source: r.source, updated_at: r.updatedAt }; });
+  rewriteSheetRows_(APP.SHEETS.ARTIST_LINKS, HEADERS.ArtistLinks, keep);
+  bustArtistLinksCache_();
+  return true;
+}
+function artistLinkPlatformMeta_(platform) { return platformMeta_(platform); }
+function artistLinksListText_(userId) {
+  const links = getArtistLinks_(userId);
+  if (!links.length) return "";
+  return links.map(function(l) { const m = artistLinkPlatformMeta_(l.platform); return m.emoji + " " + m.label + ": " + l.url; }).join("\n");
+}
+
+// ───────────────────────── کپشن و دکمه‌های هر قالب ─────────────────────────
+function templateArtistLine_(sub) {
+  const artistLabel = String(getSetting_("POST_ARTIST_LABEL") || "Artist");
+  const artistEmoji = String(getSetting_("POST_ARTIST_EMOJI") || "🔥");
+  const artists = joinArtistsAmp_(sub.artists);
+  const featuring = String(sub.featuring || "").trim();
+  const line = artists + (featuring ? " feat. " + joinArtistsAmp_(featuring) : "");
+  return line ? htmlEscape_(artistLabel) + ": " + htmlEscape_(line) + (artistEmoji ? " " + artistEmoji : "") : "";
+}
+function templateOutNowText_(sub) {
+  const mode = String(sub.mode || "simple");
+  if (mode === "coming_soon") return String(getSetting_("POST_COMING_SOON_TEXT") || "COMING SOON ⏳");
+  if (mode === "freestyle") return String(getSetting_("POST_FREESTYLE_TEXT") || "FREESTYLE 🎤");
+  return String(getSetting_("POST_OUT_NOW_TEXT") || "OUT NOW 🕊");
+}
+function templateLinksBlock_(sub, max) {
+  const visible = sub.platformVisible || {};
+  const links = (sub.links || []).filter(function(l) { return l && l.url && visible[l.platform] !== false; });
+  if (!links.length) return "";
+  return links.slice(0, max || 8).map(function(l) {
+    const meta = platformMeta_(l.platform || platformFor_(l.url));
+    return meta.emoji + " " + linkHtml_(l.url, meta.label);
+  }).join("\n");
+}
+function templateFooterBlocks_(sub, ch, opts) {
+  const o = opts || {};
+  const blocks = [];
+  const chFooter = ch && ch.footer ? String(ch.footer) : String(getSetting_("CHANNEL_FOOTER") || "");
+  let footer = String(chFooter || "").trim();
+  if (/^\s*(\[t\.me\]\(http:\/\/t\.me\)|https?:\/\/t\.me\/?|t\.me)\s*$/i.test(footer)) footer = "";
+  if (/Telegram\s*·\s*@/i.test(footer) && /t\.me/i.test(footer)) footer = "";
+  const target = channelTelegramTarget_(ch);
+  if (target) blocks.push("🔵 " + linkHtml_(target.url, target.label));
+  if (footer) blocks.push(o.plainFooter ? footer : htmlEscape_(footer));
+  return blocks;
+}
+function buildTemplateCaption_(submission, channel, options) {
+  const sub = submission || {};
+  const ch = channel || null;
+  const opts = options || {};
+  const tplKey = normalizeTemplateKey_(opts.template || (ch && ch.template));
+  const tpl = postTemplateMeta_(tplKey);
+  const titleRaw = String(sub.title || "");
+  const title = opts.plainTitle ? titleRaw : titleRaw.toUpperCase();
+  const titleEmoji = String(getSetting_("POST_TITLE_EMOJI") || "🖤");
+  const artistLine = templateArtistLine_(sub);
+  const custom = String(sub.caption || "").trim();
+  const blocks = [];
+
+  if (tplKey === "classic") {
+    // قالب فعلی رپ‌ایویلز دقیقاً همان است؛ فقط فوتر/لینک تلگرام از کانال مقصد می‌آید.
+    return buildPostCaption_(sub, { channel: ch, compact: opts.compact });
+  }
+
+  if (tplKey === "vip") {
+    const badge = String(getSetting_("POST_VIP_BADGE") || "💎 VIP");
+    blocks.push("━━━━━━━━ " + badge + " ━━━━━━━━");
+    blocks.push("💎 " + htmlEscape_(String(getSetting_("BRAND_NAME") || "فلورا بات")) + " · انتشار ویژه");
+    if (artistLine) blocks.push("🌟 " + artistLine);
+    blocks.push("👑 <blockquote>" + htmlEscape_(title) + " " + titleEmoji + "\n" + htmlEscape_(templateOutNowText_(sub)) + "</blockquote>");
+    if (custom) blocks.push("📖 " + htmlEscape_(custom).replace(/\r?\n/g, "\n"));
+    else {
+      const credit = creditLinesFor_(sub);
+      if (credit.length) blocks.push("🧩 " + credit.join("\n🧩 "));
+      trackLinesFor_(sub).forEach(function(l) { blocks.push("🎼 " + l); });
+    }
+  } else if (tplKey === "story") {
+    if (artistLine) blocks.push("🎤 " + artistLine);
+    blocks.push("<blockquote>📖 " + htmlEscape_(title) + " " + titleEmoji + "\n" + htmlEscape_(templateOutNowText_(sub)) + "</blockquote>");
+    const storyLabel = String(getSetting_("POST_STORY_LABEL") || "داستان این آهنگ");
+    if (custom) blocks.push("📝 " + htmlEscape_(storyLabel) + ":\n" + htmlEscape_(custom));
+    else {
+      const credit = creditLinesFor_(sub);
+      if (credit.length) blocks.push("🧩 " + credit.join("\n🧩 "));
+      else blocks.push("🎧 " + htmlEscape_(title) + " را همین حالا بشنو.");
+    }
+  } else if (tplKey === "audio_only") {
+    blocks.push("🎧 " + htmlEscape_(title) + " " + titleEmoji);
+    if (artistLine) blocks.push("🎤 " + artistLine);
+    if (custom) blocks.push("📝 " + htmlEscape_(custom));
+  } else if (tplKey === "full_track") {
+    if (artistLine) blocks.push("🔥 " + artistLine);
+    blocks.push("<blockquote>💿 " + htmlEscape_(title) + " " + titleEmoji + "\n" + htmlEscape_(templateOutNowText_(sub)) + "\n🎵 نسخهٔ کامل آهنگ</blockquote>");
+    if (custom) blocks.push("📝 " + htmlEscape_(custom));
+    else {
+      const credit = creditLinesFor_(sub);
+      if (credit.length) blocks.push("🧩 " + credit.join("\n🧩 "));
+      trackLinesFor_(sub).forEach(function(l) { blocks.push("🎼 " + l); });
+    }
+  }
+
+  const links = templateLinksBlock_(sub);
+  if (links && tplKey !== "audio_only") blocks.push(links);
+  const advLine = ownerAdvertiseLine_(sub);
+  if (advLine) blocks.push(advLine);
+  if (opts.includeHashtags !== false && tplKey !== "audio_only") {
+    const tags = buildPostHashtags_(sub);
+    if (tags) blocks.push(tags);
+  }
+  templateFooterBlocks_(sub, ch, opts).forEach(function(x) { blocks.push(x); });
+
+  let caption = blocks.filter(Boolean).join("\n\n").trim();
+  if (caption.length > 1024) {
+    const short = [artistLine ? "🎤 " + artistLine : "", "💿 " + htmlEscape_(titleRaw)].filter(Boolean).join("\n");
+    caption = (short + "\n\n" + (links ? links.split("\n").slice(0, 3).join("\n") : "")).trim().slice(0, 1000);
+  }
+  return caption;
+}
+function buildTemplateAudioCaption_(sub, ch, templateKey, trackTitle, index) {
+  const tplKey = normalizeTemplateKey_(templateKey);
+  const title = String(trackTitle || sub.title || "").trim();
+  if (tplKey === "classic") {
+    const lines = [htmlEscape_(title)];
+    const target = channelTelegramTarget_(ch);
+    if (target) lines.push("🔵 " + linkHtml_(target.url, target.label));
+    return lines.join("\n");
+  }
+  const lines = ["🎧 " + htmlEscape_(title)];
+  if (index === 0 && joinArtistsAmp_(sub.artists)) lines.push("🎤 " + htmlEscape_(joinArtistsAmp_(sub.artists)));
+  return lines.join("\n");
+}
+function templateDownloadMarkup_(sub, ch, templateKey, trackId) {
+  const tplKey = normalizeTemplateKey_(templateKey);
+  const rows = [];
+  const dl = downloadButtonMarkup_(sub, trackId || "");
+  if (dl) dl.inline_keyboard.forEach(function(r) { rows.push(r); });
+  if (tplKey === "vip" || tplKey === "story") {
+    const links = (sub.links || []).filter(function(l) { return l && l.url && (sub.platformVisible || {})[l.platform] !== false; }).slice(0, 4);
+    const buttons = links.map(function(l) { const p = platformMeta_(l.platform); return { text: p.emoji + " " + p.label, url: l.url }; });
+    for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2));
+  }
+  const profileLinks = (tplKey === "vip" || tplKey === "story")
+    ? ((sub.request && sub.request.details && sub.request.details.artistLinks) || []).filter(function(l) { return l && l.url; }).slice(0, 2)
+    : [];
+  profileLinks.forEach(function(l) {
+    const p = platformMeta_(l.platform);
+    if (rows.some(function(r) { return r.some(function(b) { return b.url === l.url; }); })) return;
+    rows.push([{ text: p.emoji + " " + p.label, url: l.url }]);
+  });
+  const ccRow = ownerChannelButtonRow_(sub);
+  if (ccRow) rows.push(ccRow);
+  return rows.length ? { inline_keyboard: rows } : null;
+}
+
+// ───────────────────────── ثبت کانال‌های هر ارسال در شیت ─────────────────────────
+function upsertSubmissionChannelRecord_(sub, ch, patch) {
+  try {
+    const rows = readSheetObjects_(APP.SHEETS.SUBMISSION_CHANNELS, HEADERS.SubmissionChannels);
+    const now = new Date();
+    const existing = rows.find(function(r) { return String(r.submission_id) === String(sub.id) && String(r.channel_id) === String(ch.id); });
+    const base = existing || { submission_id: sub.id, channel_id: ch.id, created_at: now };
+    const rec = {
+      submission_id: sub.id, channel_id: ch.id,
+      channel_title: patch && patch.channel_title != null ? patch.channel_title : (base.channel_title || ch.title || ch.chatId),
+      template: patch && patch.template != null ? patch.template : (base.template || ch.template),
+      access: patch && patch.access != null ? patch.access : (base.access || ch.access),
+      status: patch && patch.status != null ? patch.status : (base.status || "queued"),
+      message_ids: patch && patch.message_ids != null ? patch.message_ids : (base.message_ids || ""),
+      error: patch && patch.error != null ? patch.error : (base.error || ""),
+      created_at: base.created_at || now, updated_at: now
+    };
+    const sh = getSheet_(APP.SHEETS.SUBMISSION_CHANNELS);
+    if (existing) sh.getRange(existing.rowNumber, 1, 1, HEADERS.SubmissionChannels.length).setValues([HEADERS.SubmissionChannels.map(function(h) { return rec[h] == null ? "" : rec[h]; })]);
+    else appendRowObject_(APP.SHEETS.SUBMISSION_CHANNELS, HEADERS.SubmissionChannels, rec);
+    SUBMISSION_CHANNELS_MEMO_ = null;
+    return rec;
+  } catch (e) { logError_("upsertSubmissionChannelRecord_", e, { submissionId: sub && sub.id }); return null; }
+}
+function setSubmissionChannelsStatus_(submissionId, status) {
+  try {
+    const rows = submissionChannelRecords_(submissionId);
+    const sh = getSheet_(APP.SHEETS.SUBMISSION_CHANNELS);
+    rows.forEach(function(r) {
+      const idx = HEADERS.SubmissionChannels.indexOf("status");
+      if (idx >= 0) sh.getRange(r.rowNumber, idx + 1).setValue(String(status || ""));
+    });
+    SUBMISSION_CHANNELS_MEMO_ = null;
+  } catch (e) { logError_("setSubmissionChannelsStatus_", e, { submissionId: submissionId }); }
+}
+function submissionChannelRecords_(submissionId) {
+  try { return allSubmissionChannelRows_().filter(function(r) { return String(r.submission_id) === String(submissionId); }); }
+  catch (e) { return []; }
+}
+function submissionChannelsSummary_(sub) {
+  const recs = submissionChannelRecords_(sub.id);
+  if (recs.length) return recs.map(function(r) { return (r.channel_title || r.channel_id) + " · " + postTemplateLabel_(r.template) + " · " + (r.status || ""); }).join("\n");
+  const chs = resolveSubmissionChannels_(sub);
+  return chs.map(function(c) { return c.title + " · " + postTemplateLabel_(c.template); }).join("\n") || "—";
+}
+
+// ───────────────────────── لینک هنرمند در جریان ارسال ─────────────────────────
+function snapshotArtistLinksForSubmission_(userId, draft) {
+  const out = [];
+  const seen = {};
+  const map = (draft && draft.data && draft.data.artistLinks) || {};
+  const skipped = (draft && draft.data && draft.data.linkSkipped) || {};
+  Object.keys(map).forEach(function(platform) {
+    const item = map[platform];
+    const url = item && item.url ? String(item.url) : "";
+    if (!url) return;
+    const key = platform + "|" + url;
+    if (seen[key]) return;
+    seen[key] = true;
+    out.push({ platform: platform, url: url, source: item.source || "manual" });
+  });
+  getArtistLinks_(userId).forEach(function(l) {
+    // اگر هنرمند برای همین ارسال، این پلتفرم را «رد» کرده یا لینک دستی گذاشته،
+    // لینک پروفایل به‌طور خودکار اضافه نمی‌شود.
+    if (skipped[l.platform] || map[l.platform]) return;
+    const key = l.platform + "|" + l.url;
+    if (seen[key]) return;
+    seen[key] = true;
+    out.push({ platform: l.platform, url: l.url, source: "profile", version: l.version });
+  });
+  return out.slice(0, 12);
+}
+function handleManualArtistLinkInput_(message, session, draft) {
+  const uid = String(message.from.id); const chatId = String(message.chat.id);
+  const text = String(message.text || "").trim();
+  const platform = String((session.data || {}).platform || "");
+  const meta = platformMeta_(platform);
+  if (isCancelText_(text)) { clearSession_("M:" + uid); setSession_("M:" + uid, "MUSIC_LINKS", { draftId: draft.draftId }); showDraftLinksPanel_(chatId, uid, draft); return; }
+  const url = normalizeUrl_(text);
+  if (!url) { sendMessage_(chatId, t_(uid, "ARTIST_LINKS_BAD"), cancelKeyboard_()); return; }
+  removeDraftPlatformLinks_(draft, platform);
+  if (!draft.data.artistLinks) draft.data.artistLinks = {};
+  draft.data.artistLinks[platform] = { url: url, source: "manual" };
+  if (!Array.isArray(draft.data.links)) draft.data.links = [];
+  if (!draft.data.links.some(function(l) { return l.url === url; })) draft.data.links.push({ url: url, platform: platform || platformFor_(url) });
+  draft.data.linkSkipped = Object.assign({}, draft.data.linkSkipped || {}, (function() { const o = {}; o[platform] = false; return o; })());
+  saveMusicDraft_(draft);
+  setSession_("M:" + uid, "MUSIC_LINKS", { draftId: draft.draftId });
+  sendMessage_(chatId, "✅ " + meta.label + " → " + url);
+  // اگر هنوز در پروفایل نیست، همان‌جا اجازهٔ ذخیره بده
+  if (!getArtistLink_(uid, platform)) {
+    sendMessage_(chatId, t_(uid, "ARTIST_LINKS_SAVE_PROFILE_Q", { p: meta.label }), {
+      inline_keyboard: [[
+        { text: t_(uid, "ARTIST_LINKS_SAVE_YES"), callback_data: "m:alsv:" + draft.draftId + ":" + platform },
+        { text: t_(uid, "ARTIST_LINKS_SAVE_NO"), callback_data: "m:alno:" + draft.draftId + ":" + platform }
+      ]]
+    });
+  }
+  showDraftLinksPanel_(chatId, uid, draft);
+}
+function handleDraftArtistLinkCallback_(cb, parts, draft) {
+  const uid = String(cb.from.id); const chatId = String(cb.message.chat.id);
+  const action = parts[1]; const platform = parts[3] || "";
+  const meta = platformMeta_(platform);
+  const map = draftArtistLinkMap_(draft);
+  if (action === "alp") {
+    const profile = getArtistLink_(uid, platform);
+    if (!profile) { answerCallbackQuery_(cb.id, t_(uid, "ARTIST_LINKS_PROFILE_MISSING", { p: meta.label })); return; }
+    removeDraftPlatformLinks_(draft, platform);
+    map[platform] = { url: profile.url, source: "profile" };
+    if (!Array.isArray(draft.data.links)) draft.data.links = [];
+    if (!draft.data.links.some(function(l) { return l.url === profile.url; })) draft.data.links.push({ url: profile.url, platform: platform });
+    saveMusicDraft_(draft);
+    answerCallbackQuery_(cb.id, t_(uid, "ARTIST_LINKS_FROM_PROFILE_DONE", { p: meta.label }));
+    showDraftLinksPanel_(chatId, uid, draft, cb.message.message_id);
+    return;
+  }
+  if (action === "alm") {
+    setSession_("M:" + uid, "MUSIC_LINK_MANUAL", { draftId: draft.draftId, platform: platform });
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, t_(uid, "ARTIST_LINKS_MANUAL_ASK", { p: meta.label }), cancelKeyboard_());
+    return;
+  }
+  if (action === "als") {
+    removeDraftPlatformLinks_(draft, platform);
+    draft.data.linkSkipped = Object.assign({}, draft.data.linkSkipped || {}, (function() { const o = {}; o[platform] = true; return o; })());
+    saveMusicDraft_(draft);
+    answerCallbackQuery_(cb.id, t_(uid, "ARTIST_LINKS_SKIPPED", { p: meta.label }));
+    showDraftLinksPanel_(chatId, uid, draft, cb.message.message_id);
+    return;
+  }
+  if (action === "alh") {
+    const versions = getArtistLinkHistory_(uid, platform);
+    if (!versions.length) { answerCallbackQuery_(cb.id, "تاریخچه‌ای نیست"); return; }
+    const lines = [t_(uid, "ARTIST_LINKS_HISTORY", { p: meta.label })];
+    versions.slice(0, 15).forEach(function(v) { lines.push(t_(uid, "ARTIST_LINKS_VERSION", { v: v.version, u: v.url }) + " · " + formatDate_(v.archivedAt)); });
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, lines.join("\n"));
+    return;
+  }
+  if (action === "alsv") {
+    const chosen = map[platform] || null;
+    if (!chosen) { answerCallbackQuery_(cb.id, "لینکی انتخاب نشده"); return; }
+    const saved = saveArtistLink_(uid, platform, chosen.url, "music_flow", "saved_during_submission");
+    if (!saved.ok) { answerCallbackQuery_(cb.id, t_(uid, "ARTIST_LINKS_BAD")); return; }
+    answerCallbackQuery_(cb.id, t_(uid, "ARTIST_LINKS_SAVED_PROFILE"));
+    sendMessage_(chatId, t_(uid, "ARTIST_LINKS_SAVED", { p: meta.label, v: saved.version }));
+    return;
+  }
+  if (action === "alno") { answerCallbackQuery_(cb.id, "باشه"); return; }
+  answerCallbackQuery_(cb.id, "نامعتبر");
+}
+
+// ───────────────────────── پنل کاربر: اشتراک VIP ─────────────────────────
+function showVipPanel_(chatId, uid, editMsgId) {
+  const lines = [t_(uid, "VIP_PANEL_TITLE"), ""];
+  const info = vipInfoFor_(uid);
+  if (info.active) {
+    lines.push(t_(uid, "VIP_STATUS_ACTIVE", {
+      p: (info.plan && info.plan.name) || info.sub.planId,
+      e: formatDate_(info.sub.expiresAt), u: info.used, q: info.quota, c: subscriptionChannelsLabel_(info)
+    }));
+  } else {
+    const subs = getSubscriptions_().filter(function(s) { return s.userId === String(uid); }).sort(function(a, b) { return dateMillis_(b.expiresAt) - dateMillis_(a.expiresAt); });
+    const last = subs[0];
+    if (last && dateMillis_(last.expiresAt) <= nowMs_()) lines.push(t_(uid, "VIP_STATUS_EXPIRED", { p: (getPlanById_(last.planId) || {}).name || last.planId, e: formatDate_(last.expiresAt) }));
+    else lines.push(t_(uid, "VIP_STATUS_NONE"));
+  }
+  const plans = getSubscriptionPlans_().filter(function(p) { return p.active; });
+  lines.push("", t_(uid, "VIP_PICK_PLAN"));
+  const rows = [];
+  if (!plans.length) lines.push(t_(uid, "VIP_NO_PLANS"));
+  plans.forEach(function(p) {
+    lines.push(t_(uid, "VIP_PLAN_LINE", { n: (p.badge ? p.badge + " " : "") + p.name, price: p.price.toLocaleString("en-US"), d: p.days, q: p.trackQuota, c: p.channelScope === "all" ? "همه" : (p.channels.length ? p.channels.length : "انتخابی") }));
+    rows.push([{ text: "💳 " + p.name + " · " + p.price.toLocaleString("en-US") + " تومان", callback_data: "vip:plan:" + p.id }]);
+  });
+  rows.push([{ text: "🧾 درخواست‌های من", callback_data: "vip:reqs" }, { text: "🏠 منو", callback_data: "vip:home" }]);
+  const text = lines.join("\n");
+  if (editMsgId) sendOrEditUserPanel_(chatId, editMsgId, text, { inline_keyboard: rows });
+  else sendMessage_(chatId, text, { inline_keyboard: rows });
+}
+function showVipPlanPayment_(chatId, uid, planId, editMsgId) {
+  const plan = getPlanById_(planId);
+  if (!plan || !plan.active) { sendMessage_(chatId, t_(uid, "VIP_NO_PLANS")); return; }
+  const body = t_(uid, "VIP_PAY_BODY", {
+    p: plan.name, amount: plan.price.toLocaleString("en-US"),
+    card: String(getSetting_("PAYMENT_CARD_NUMBER") || "—"),
+    holder: String(getSetting_("PAYMENT_CARD_HOLDER") || "—"),
+    instructions: String(getSetting_("PAYMENT_INSTRUCTIONS") || "")
+  });
+  const rows = [[{ text: "✅ پرداخت کردم، شمارهٔ پیگیری", callback_data: "vip:pay:" + plan.id }], [{ text: "⬅️ بازگشت", callback_data: "vip:panel" }]];
+  if (editMsgId) sendOrEditUserPanel_(chatId, editMsgId, body, { inline_keyboard: rows }, { parse_mode: "HTML" });
+  else sendMessage_(chatId, body, { inline_keyboard: rows }, { parse_mode: "HTML" });
+}
+function showVipMyRequests_(chatId, uid) {
+  const reqs = getPaymentRequests_().filter(function(r) { return r.userId === String(uid); }).sort(function(a, b) { return dateMillis_(b.createdAt) - dateMillis_(a.createdAt); });
+  if (!reqs.length) { sendMessage_(chatId, "🧾 هنوز درخواستی نداری.", { inline_keyboard: [[{ text: "⬅️ بازگشت", callback_data: "vip:panel" }]] }); return; }
+  const labels = { pending: "⏳ در انتظار بررسی", approved: "✅ تأییدشده", rejected: "❌ ردشده" };
+  const lines = ["🧾 درخواست‌های اشتراک تو:"];
+  reqs.slice(0, 10).forEach(function(r) { lines.push("• " + r.planName + " · " + r.amount.toLocaleString("en-US") + " تومان · " + (labels[r.status] || r.status) + " · " + formatDate_(r.createdAt) + (r.adminNote ? "\n  📝 " + truncate_(r.adminNote, 100) : "")); });
+  sendMessage_(chatId, lines.join("\n"), { inline_keyboard: [[{ text: "⬅️ بازگشت", callback_data: "vip:panel" }]] });
+}
+function startVipPayment_(chatId, uid, planId) {
+  const plan = getPlanById_(planId);
+  if (!plan) { sendMessage_(chatId, t_(uid, "VIP_NO_PLANS")); return; }
+  setSession_("M:" + uid, "VIP_PAY_REF", { planId: plan.id });
+  sendMessage_(chatId, t_(uid, "VIP_PAY_ASK_REF"), cancelKeyboard_());
+}
+function handleVipPaymentInput_(message, session) {
+  const uid = String(message.from.id); const chatId = String(message.chat.id);
+  const plan = getPlanById_(String((session.data || {}).planId || ""));
+  if (!plan) { clearSession_("M:" + uid); showVipPanel_(chatId, uid); return; }
+  let receipt = "";
+  if (message.photo && message.photo.length) receipt = message.photo[message.photo.length - 1].file_id;
+  else if (message.document && message.document.file_id) receipt = message.document.file_id;
+  const ref = String(message.text || message.caption || "").trim();
+  if (!receipt && !ref) { sendMessage_(chatId, t_(uid, "VIP_PAY_ASK_REF"), cancelKeyboard_()); return; }
+  const requestId = createPaymentRequest_(uid, plan, ref, receipt);
+  clearSession_("M:" + uid);
+  const autoApprove = String(getSetting_("PAYMENT_AUTO_APPROVE") || "false") === "true";
+  if (autoApprove) {
+    approvePaymentRequest_(requestId, "auto", "تأیید خودکار");
+    sendMessage_(chatId, t_(uid, "VIP_PAY_SUBMITTED"));
+    return;
+  }
+  sendMessage_(chatId, receipt ? t_(uid, "VIP_PAY_RECEIVED") : t_(uid, "VIP_PAY_SUBMITTED"));
+  const u = getUserById_(uid);
+  const who = u ? (u.rapName || ((u.firstName + " " + u.lastName).trim()) || uid) : uid;
+  getAdmins_().forEach(function(a) {
+    const lines = ["💳 درخواست اشتراک جدید", "👤 " + who + " (🆔 " + uid + ")", "💠 پلن: " + plan.name + " · " + plan.price.toLocaleString("en-US") + " تومان", "🧾 پیگیری: " + truncate_(ref || "—", 120)];
+    const opts = { inline_keyboard: [[{ text: "✅ تأیید", callback_data: "vipx:reqok:" + requestId }, { text: "❌ رد", callback_data: "vipx:reqno:" + requestId }], [{ text: "📂 جزئیات", callback_data: "vipx:req:" + requestId }]] };
+    sendMessage_(a, lines.join("\n"), opts);
+    if (receipt) {
+      try {
+        if (message.photo && message.photo.length) telegramRequest_("sendPhoto", { chat_id: a, photo: receipt, caption: "رسید پرداخت " + uid });
+        else telegramRequest_("sendDocument", { chat_id: a, document: receipt, caption: "رسید پرداخت " + uid });
+      } catch (e) {}
+    }
+  });
+}
+function approvePaymentRequest_(requestId, adminId, note) {
+  const req = getPaymentRequests_().find(function(r) { return r.id === String(requestId); });
+  if (!req) return false;
+  if (req.status === "approved") return true;
+  if (req.status !== "pending") return false; // درخواست رد‌شده دوباره فعال نمی‌شود
+  const plan = getPlanById_(req.planId);
+  if (!plan) return false;
+  const granted = grantSubscription_(req.userId, plan.id, adminId, note, req.id);
+  setPaymentRequestStatus_(req.id, "approved", adminId, note || "");
+  logAdminAction_(adminId, "vip_payment_approve", req.userId, req.id + " · " + plan.name);
+  if (granted) {
+    sendMessage_(req.userId, t_(req.userId, "VIP_PAY_APPROVED", { p: plan.name, e: formatDate_(granted.expiresAt), q: plan.trackQuota, c: plan.channelScope === "all" ? "همهٔ کانال‌ها (نامحدود)" : "کانال‌های منتخب" }));
+  }
+  return true;
+}
+function rejectPaymentRequest_(requestId, adminId, note) {
+  const req = getPaymentRequests_().find(function(r) { return r.id === String(requestId); });
+  if (!req) return false;
+  if (req.status !== "pending") return false;
+  setPaymentRequestStatus_(req.id, "rejected", adminId, note || "");
+  logAdminAction_(adminId, "vip_payment_reject", req.userId, req.id + " · " + note);
+  sendMessage_(req.userId, t_(req.userId, "VIP_PAY_REJECTED", { note: note ? "\n📝 " + note : "" }));
+  return true;
+}
+function handleVipUserCallback_(cb) {
+  const uid = String(cb.from.id); const chatId = String(cb.message && cb.message.chat ? cb.message.chat.id : uid);
+  if (!getUserById_(uid)) { answerCallbackQuery_(cb.id, t_(uid, "LOGIN_NEEDED")); sendEntryCard_(chatId); return; }
+  const data = String(cb.data || ""); const parts = data.split(":");
+  const action = parts[1] || "";
+  const msgId = cb.message && cb.message.message_id ? cb.message.message_id : null;
+  if (action === "home") { answerCallbackQuery_(cb.id); showUserMenu_(chatId); return; }
+  if (action === "panel") { answerCallbackQuery_(cb.id); showVipPanel_(chatId, uid, msgId); return; }
+  if (action === "reqs") { answerCallbackQuery_(cb.id); showVipMyRequests_(chatId, uid); return; }
+  if (action === "plan") { answerCallbackQuery_(cb.id); showVipPlanPayment_(chatId, uid, parts[2] || "", msgId); return; }
+  if (action === "pay") { answerCallbackQuery_(cb.id); startVipPayment_(chatId, uid, parts[2] || ""); return; }
+  answerCallbackQuery_(cb.id, t_(uid, "EXPIRED_BTN"));
+}
+
+// ───────────────────────── پنل مدیر: اشتراک‌ها ─────────────────────────
+function showAdminSubscriptionsPanel_(chatId, uid) {
+  if (!adminGate_(chatId, uid, "settings")) return;
+  const plans = getSubscriptionPlans_();
+  const reqs = getPaymentRequests_().filter(function(r) { return r.status === "pending"; });
+  const active = getSubscriptions_().filter(function(s) { return s.status === "active" && dateMillis_(s.expiresAt) > nowMs_(); });
+  const lines = [
+    "💎 مدیریت اشتراک‌ها",
+    "🚦 سیستم اشتراک: " + (String(getSetting_("VIP_ENABLED") || "true") === "true" ? "روشن" : "خاموش"),
+    "💠 پلن‌ها: " + plans.length + " · 👑 اشتراک فعال: " + active.length,
+    "⏳ درخواست‌های پرداخت: " + reqs.length,
+    "💳 کارت: " + (getSetting_("PAYMENT_CARD_NUMBER") || "—"),
+    "👤 صاحب کارت: " + (getSetting_("PAYMENT_CARD_HOLDER") || "—"),
+    "🤖 تأیید خودکار پرداخت: " + (String(getSetting_("PAYMENT_AUTO_APPROVE") || "false") === "true" ? "روشن" : "خاموش")
+  ];
+  sendMessage_(chatId, lines.join("\n"), { inline_keyboard: [
+    [{ text: "💠 پلن‌ها و قیمت‌ها", callback_data: "vipx:plans" }, { text: "⏳ درخواست‌ها (" + reqs.length + ")", callback_data: "vipx:reqs" }],
+    [{ text: "👑 کاربران VIP", callback_data: "vipx:users" }, { text: "🎁 دادن اشتراک", callback_data: "vipx:grant" }],
+    [{ text: "💳 شمارهٔ کارت", callback_data: "vipx:set:PAYMENT_CARD_NUMBER" }, { text: "👤 صاحب کارت", callback_data: "vipx:set:PAYMENT_CARD_HOLDER" }],
+    [{ text: "📝 توضیحات پرداخت", callback_data: "vipx:set:PAYMENT_INSTRUCTIONS" }],
+    [{ text: "🔁 سیستم: " + (String(getSetting_("VIP_ENABLED") || "true") === "true" ? "خاموش کن" : "روشن کن"), callback_data: "vipx:toggle" }],
+    [{ text: "🏠 منو", callback_data: "a:home" }]
+  ] });
+}
+function showAdminPlansPanel_(chatId, uid, editMsgId) {
+  const plans = getSubscriptionPlans_();
+  const lines = ["💠 پلن‌های اشتراک (" + plans.length + ")"];
+  plans.forEach(function(p) {
+    lines.push("• " + (p.active ? "✅" : "⛔") + " " + (p.badge ? p.badge + " " : "") + p.name + " — " + p.price.toLocaleString("en-US") + " تومان · " + p.days + " روز · " + p.trackQuota + " ترک · " + (p.channelScope === "all" ? "همهٔ کانال‌ها" : "کانال: " + (p.channels.join("، ") || "تعیین‌نشده")));
+  });
+  const rows = plans.map(function(p) { return [{ text: (p.active ? "✅ " : "⛔ ") + p.name + " · " + p.price.toLocaleString("en-US"), callback_data: "vipx:plan:" + p.id }]; });
+  rows.push([{ text: "➕ پلن جدید", callback_data: "vipx:planadd" }]);
+  rows.push([{ text: "⬅️ بازگشت", callback_data: "vipx:panel" }]);
+  sendOrEditAdminPanel_(chatId, editMsgId, lines.join("\n"), { inline_keyboard: rows });
+}
+function showAdminPlanDetail_(chatId, uid, planId, editMsgId) {
+  const p = getPlanById_(planId);
+  if (!p) { sendMessage_(chatId, "پلن پیدا نشد.", { inline_keyboard: [[{ text: "⬅️ بازگشت", callback_data: "vipx:plans" }]] }); return; }
+  const lines = [
+    "💠 " + (p.badge ? p.badge + " " : "") + p.name + (p.active ? " ✅" : " ⛔"),
+    "💰 قیمت: " + p.price.toLocaleString("en-US") + " تومان",
+    "⏳ مدت: " + p.days + " روز",
+    "🎵 سهمیه: " + p.trackQuota + " ترک",
+    "📡 کانال‌ها: " + (p.channelScope === "all" ? "همهٔ کانال‌ها (و کانال‌های تازه)" : (p.channels.join("، ") || "تعیین‌نشده")),
+    "🆔 " + p.id
+  ];
+  const rows = [
+    [{ text: "💰 قیمت", callback_data: "vipx:planf:" + p.id + ":price" }, { text: "⏳ مدت", callback_data: "vipx:planf:" + p.id + ":days" }],
+    [{ text: "🎵 سهمیه", callback_data: "vipx:planf:" + p.id + ":quota" }, { text: "📡 کانال‌ها", callback_data: "vipx:planf:" + p.id + ":channels" }],
+    [{ text: "🏷 نشان", callback_data: "vipx:planf:" + p.id + ":badge" }, { text: "📝 نام", callback_data: "vipx:planf:" + p.id + ":name" }],
+    [{ text: p.channelScope === "all" ? "📡 محدود به کانال‌ها" : "🌐 همهٔ کانال‌ها", callback_data: "vipx:planscope:" + p.id }],
+    [{ text: p.active ? "⛔ غیرفعال کن" : "✅ فعال کن", callback_data: "vipx:plantoggle:" + p.id }, { text: "🗑 حذف", callback_data: "vipx:plandell:" + p.id }]
+  ];
+  // اگر پلن محدود است، مدیر با یک دکمه کانال‌های مجاز را روشن/خاموش می‌کند.
+  if (p.channelScope !== "all") {
+    activePublishChannels_().slice(0, 8).forEach(function(c, idx) {
+      const on = p.channels.indexOf(String(c.id)) >= 0 || p.channels.indexOf(String(c.chatId)) >= 0;
+      rows.push([{ text: (on ? "✅ " : "⬜️ ") + truncate_(c.title, 28), callback_data: "vipx:planch:" + p.id + ":" + idx }]);
+    });
+  }
+  rows.push([{ text: "⬅️ بازگشت", callback_data: "vipx:plans" }]);
+  sendOrEditAdminPanel_(chatId, editMsgId, lines.join("\n"), { inline_keyboard: rows });
+}
+function showAdminPaymentRequests_(chatId, uid, editMsgId) {
+  const reqs = getPaymentRequests_().filter(function(r) { return r.status === "pending"; }).sort(function(a, b) { return dateMillis_(a.createdAt) - dateMillis_(b.createdAt); });
+  const lines = ["⏳ درخواست‌های پرداخت در انتظار (" + reqs.length + ")"];
+  const rows = [];
+  reqs.slice(0, 10).forEach(function(r) {
+    const u = getUserById_(r.userId);
+    lines.push("• " + r.planName + " · " + r.amount.toLocaleString("en-US") + " · " + (u ? (u.rapName || u.firstName) : r.userId) + " · " + formatDate_(r.createdAt));
+    rows.push([{ text: "✅ " + truncate_((u && (u.rapName || u.firstName)) || r.userId, 16) + " · " + r.planName, callback_data: "vipx:req:" + r.id }]);
+  });
+  if (!reqs.length) lines.push("درخواستی نیست.");
+  rows.push([{ text: "⬅️ بازگشت", callback_data: "vipx:panel" }]);
+  sendOrEditAdminPanel_(chatId, editMsgId, lines.join("\n"), { inline_keyboard: rows });
+}
+function showAdminPaymentRequestDetail_(chatId, uid, requestId) {
+  const r = getPaymentRequests_().find(function(x) { return x.id === String(requestId); });
+  if (!r) { sendMessage_(chatId, "درخواست پیدا نشد."); return; }
+  const u = getUserById_(r.userId);
+  const lines = ["💳 درخواست " + r.id, "👤 " + (u ? (u.rapName || "") + " · " + (u.firstName + " " + u.lastName) : "") + " (🆔 " + r.userId + ")", "💠 پلن: " + r.planName + " · " + r.amount.toLocaleString("en-US") + " تومان", "🧾 پیگیری: " + (r.refCode || "—"), "🚦 وضعیت: " + r.status, "🗓 " + formatDate_(r.createdAt)];
+  if (r.adminNote) lines.push("📝 " + r.adminNote);
+  const rows = [];
+  if (r.status === "pending") rows.push([{ text: "✅ تأیید و فعال‌سازی", callback_data: "vipx:reqok:" + r.id }, { text: "❌ رد", callback_data: "vipx:reqno:" + r.id }]);
+  rows.push([{ text: "⬅️ بازگشت", callback_data: "vipx:reqs" }]);
+  sendMessage_(chatId, lines.join("\n"), { inline_keyboard: rows });
+  if (r.receiptFileId) {
+    try { telegramRequest_("sendPhoto", { chat_id: chatId, photo: r.receiptFileId, caption: "رسید " + r.id }); } catch (e) { try { telegramRequest_("sendDocument", { chat_id: chatId, document: r.receiptFileId, caption: "رسید " + r.id }); } catch (e2) {} }
+  }
+}
+function showAdminVipUsers_(chatId, uid) {
+  const now = nowMs_();
+  const list = getSubscriptions_().filter(function(s) { return s.status === "active" && dateMillis_(s.expiresAt) > now; }).sort(function(a, b) { return dateMillis_(a.expiresAt) - dateMillis_(b.expiresAt); });
+  const lines = ["👑 کاربران VIP فعال (" + list.length + ")"];
+  const rows = [];
+  list.slice(0, 15).forEach(function(s) {
+    const u = getUserById_(s.userId); const p = getPlanById_(s.planId);
+    lines.push("• " + ((u && (u.rapName || u.firstName)) || s.userId) + " · " + ((p && p.name) || s.planId) + " · " + subscriptionUsageCount_(s) + "/" + (Number(s.slotsTotal) || (p && p.trackQuota) || 0) + " ترک · تا " + formatDate_(s.expiresAt));
+    rows.push([{ text: "👤 " + truncate_((u && u.rapName) || s.userId, 18), callback_data: "a:user:" + s.userId }, { text: "🗑 لغو", callback_data: "vipx:revoke:" + s.userId }]);
+  });
+  if (!list.length) lines.push("هیچ اشتراک فعالی نیست.");
+  rows.push([{ text: "⬅️ بازگشت", callback_data: "vipx:panel" }]);
+  sendMessage_(chatId, lines.join("\n"), { inline_keyboard: rows });
+}
+function handleAdminVipCallback_(cb) {
+  const uid = String(cb.from.id); const chatId = String(cb.message.chat.id);
+  const parts = String(cb.data || "").split(":"); const action = parts[1] || "";
+  const msgId = cb.message && cb.message.message_id ? cb.message.message_id : null;
+  if (!hasAdminPermission_(uid, "settings")) { answerCallbackQuery_(cb.id, "دسترسی نداری."); return; }
+  if (action === "panel") { answerCallbackQuery_(cb.id); showAdminSubscriptionsPanel_(chatId, uid); return; }
+  if (action === "toggle") {
+    const next = String(getSetting_("VIP_ENABLED") || "true") === "true" ? "false" : "true";
+    setSetting_("VIP_ENABLED", next);
+    logAdminAction_(uid, "vip_toggle", next, "");
+    answerCallbackQuery_(cb.id, next === "true" ? "سیستم روشن شد" : "سیستم خاموش شد");
+    showAdminSubscriptionsPanel_(chatId, uid); return;
+  }
+  if (action === "plans") { answerCallbackQuery_(cb.id); showAdminPlansPanel_(chatId, uid, msgId); return; }
+  if (action === "plan") { answerCallbackQuery_(cb.id); showAdminPlanDetail_(chatId, uid, parts[2] || "", msgId); return; }
+  if (action === "planadd") {
+    setSession_("M:" + uid, "ADM_VIP_PLAN_NEW", {});
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, "➕ پلن جدید را در یک خط بفرست:\nنام | قیمت | روز | سهمیهٔ ترک | all یا لیست شناسهٔ کانال‌ها | نشان\n\nمثال:\nطلایی | 500000 | 30 | 10 | all | 🥇", cancelKeyboard_()); return;
+  }
+  if (action === "planf") {
+    setSession_("M:" + uid, "ADM_VIP_PLAN_FIELD", { planId: parts[2] || "", field: parts[3] || "" });
+    answerCallbackQuery_(cb.id);
+    const labels = { price: "قیمت (تومان)", days: "مدت (روز)", quota: "سهمیهٔ ترک", channels: "شناسهٔ کانال‌ها با کاما (یا all)", badge: "نشان/ایموجی", name: "نام پلن" };
+    sendMessage_(chatId, "✏️ مقدار جدید «" + (labels[parts[3]] || parts[3]) + "» را بفرست:", cancelKeyboard_()); return;
+  }
+  if (action === "planscope") {
+    const p = getPlanById_(parts[2] || "");
+    if (p) savePlan_({ plan_id: p.id, channel_scope: p.channelScope === "all" ? "limited" : "all" });
+    answerCallbackQuery_(cb.id, "ثبت شد");
+    showAdminPlanDetail_(chatId, uid, parts[2] || "", msgId); return;
+  }
+  if (action === "planch") {
+    const p = getPlanById_(parts[2] || "");
+    const ch = activePublishChannels_()[Number(parts[3])];
+    const chId = ch ? String(ch.id) : "";
+    if (!p || !chId) { answerCallbackQuery_(cb.id, "نامعتبر"); return; }
+    let list = (p.channels || []).map(String);
+    const at = list.indexOf(chId);
+    if (at >= 0) list.splice(at, 1); else list.push(chId);
+    savePlan_({ plan_id: p.id, channel_scope: "limited", channels_json: JSON.stringify(list) });
+    logAdminAction_(uid, "vip_plan_channels", p.id, chId);
+    answerCallbackQuery_(cb.id, at >= 0 ? "حذف شد" : "اضافه شد");
+    showAdminPlanDetail_(chatId, uid, p.id, msgId); return;
+  }
+  if (action === "plantoggle") {
+    const p = getPlanById_(parts[2] || "");
+    if (p) savePlan_({ plan_id: p.id, active: p.active ? "false" : "true" });
+    answerCallbackQuery_(cb.id, "ثبت شد");
+    showAdminPlanDetail_(chatId, uid, parts[2] || "", msgId); return;
+  }
+  if (action === "plandell") { answerCallbackQuery_(cb.id, "برای حذف مطمئن شو"); sendMessage_(chatId, "⚠️ حذف پلن «" + ((getPlanById_(parts[2] || "") || {}).name || parts[2]) + "»؟", { inline_keyboard: [[{ text: "🗑 حذف", callback_data: "vipx:plandell2:" + parts[2] }, { text: "❌ انصراف", callback_data: "vipx:plan:" + parts[2] }]] }); return; }
+  if (action === "plandell2") { deletePlan_(parts[2] || ""); answerCallbackQuery_(cb.id, "حذف شد"); showAdminPlansPanel_(chatId, uid); return; }
+  if (action === "reqs") { answerCallbackQuery_(cb.id); showAdminPaymentRequests_(chatId, uid, msgId); return; }
+  if (action === "req") { answerCallbackQuery_(cb.id); showAdminPaymentRequestDetail_(chatId, uid, parts[2] || ""); return; }
+  if (action === "reqok") {
+    const ok = approvePaymentRequest_(parts[2] || "", uid, "تأیید مدیر");
+    answerCallbackQuery_(cb.id, ok ? "✅ اشتراک فعال شد" : "خطا");
+    showAdminPaymentRequests_(chatId, uid); return;
+  }
+  if (action === "reqno") {
+    setSession_("M:" + uid, "ADM_VIP_REJECT", { requestId: parts[2] || "" });
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, "دلیل رد را بفرست (یا «-» برای بدون دلیل):", cancelKeyboard_()); return;
+  }
+  if (action === "users") { answerCallbackQuery_(cb.id); showAdminVipUsers_(chatId, uid); return; }
+  if (action === "revoke") { revokeSubscription_(parts[2] || "", uid); answerCallbackQuery_(cb.id, "لغو شد"); showAdminVipUsers_(chatId, uid); return; }
+  if (action === "grant") {
+    setSession_("M:" + uid, "ADM_VIP_GRANT_UID", {});
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, "🎁 آیدی عددی کاربر را بفرست:", cancelKeyboard_()); return;
+  }
+  if (action === "grantp") {
+    const target = parts[2] || ""; const planId = parts[3] || "";
+    const granted = grantSubscription_(target, planId, uid, "اهدای مدیر", "");
+    answerCallbackQuery_(cb.id, granted ? "✅ فعال شد" : "خطا");
+    if (granted) {
+      logAdminAction_(uid, "vip_grant", target, planId);
+      sendMessage_(target, t_(target, "VIP_PAY_APPROVED", { p: granted.plan.name, e: formatDate_(granted.expiresAt), q: granted.plan.trackQuota, c: granted.plan.channelScope === "all" ? "همهٔ کانال‌ها (نامحدود)" : "کانال‌های منتخب" }));
+      sendMessage_(chatId, "✅ اشتراک «" + granted.plan.name + "» برای " + target + " فعال شد تا " + formatDate_(granted.expiresAt));
+    }
+    showAdminSubscriptionsPanel_(chatId, uid); return;
+  }
+  if (action === "set") {
+    setSession_("M:" + uid, "ADM_VIP_SET", { key: parts[2] || "" });
+    answerCallbackQuery_(cb.id);
+    const labels = { PAYMENT_CARD_NUMBER: "شمارهٔ کارت", PAYMENT_CARD_HOLDER: "نام صاحب کارت", PAYMENT_INSTRUCTIONS: "توضیحات پرداخت" };
+    sendMessage_(chatId, "✏️ " + (labels[parts[2]] || parts[2]) + " جدید را بفرست:\nمقدار فعلی: " + truncate_(getSetting_(parts[2]) || "—", 300), cancelKeyboard_()); return;
+  }
+  answerCallbackQuery_(cb.id, "نامعتبر");
+}
+
+// ───────────────────────── پنل مدیر: کانال‌ها و قالب‌ها ─────────────────────────
+function showPublishChannelsPanel_(chatId, uid, editMsgId) {
+  if (!adminGate_(chatId, uid, "channel")) return;
+  const all = activePublishChannels_();
+  const rowsAll = getPublishChannelRows_();
+  const lines = [
+    "📡 کانال‌های انتشار و قالب‌ها",
+    "🌐 چندکاناله: " + (String(getSetting_("MULTI_CHANNEL_ENABLED") || "true") === "true" ? "روشن" : "خاموش"),
+    "🧭 انتخاب کانال: " + (channelSelectionMode_() === "user" ? "هنرمند انتخاب می‌کند" : "مدیر تعیین می‌کند"),
+    "📋 پیش‌فرض ارسال: " + (getSetting_("DEFAULT_PUBLISH_CHANNELS") || "free"),
+    "",
+    "قالب‌ها:",
+    postTemplateListText_(),
+    ""
+  ];
+  all.forEach(function(c) {
+    lines.push("• " + (c.isMain ? "🏠 " : "") + c.title + " — " + postTemplateLabel_(c.template) + " · " + (c.access === "free" ? "رایگان" : "VIP") + (c.chatId ? " · " + c.chatId : ""));
+  });
+  if (!all.length) lines.push("هیچ کانالی تنظیم نشده. اول «کانال اصلی» را در تنظیمات ثبت کن.");
+  const inactive = rowsAll.filter(function(c) { return !c.active; });
+  if (inactive.length) {
+    lines.push("", "⏸ غیرفعال‌ها: " + inactive.map(function(c) { return c.title; }).join("، "));
+  }
+  const rows = all.map(function(c) {
+    return [{ text: (c.isMain ? "🏠 " : "📺 ") + truncate_(c.title, 22) + " · " + postTemplateLabel_(c.template) + (c.access === "free" ? " · رایگان" : " · VIP"), callback_data: "pch:ch:" + c.id }];
+  });
+  inactive.forEach(function(c) {
+    rows.push([{ text: "⏸ " + truncate_(c.title, 30) + " · غیرفعال", callback_data: "pch:ch:" + c.id }]);
+  });
+  rows.push([{ text: "➕ افزودن کانال", callback_data: "pch:add" }, { text: "🔄 انتقال کانال‌های قدیمی", callback_data: "pch:sync" }]);
+  rows.push([{ text: "🧭 حالت انتخاب: " + (channelSelectionMode_() === "user" ? "هنرمند" : "مدیر"), callback_data: "pch:mode" }]);
+  rows.push([{ text: "⬅️ بازگشت", callback_data: "a:channel" }]);
+  const text = lines.join("\n");
+  if (editMsgId) sendOrEditAdminPanel_(chatId, editMsgId, text, { inline_keyboard: rows });
+  else sendMessage_(chatId, text, { inline_keyboard: rows });
+}
+function showPublishChannelDetail_(chatId, uid, channelId, editMsgId) {
+  if (!adminGate_(chatId, uid, "channel")) return;
+  const ch = getPublishChannelById_(channelId);
+  if (!ch) { sendMessage_(chatId, "کانال پیدا نشد.", { inline_keyboard: [[{ text: "⬅️ بازگشت", callback_data: "pch:panel" }]] }); return; }
+  const lines = [
+    "📺 " + ch.title + (ch.isMain ? " (کانال اصلی)" : ""),
+    "🆔 " + ch.chatId + (ch.username ? " · @" + ch.username : ""),
+    "🎨 قالب: " + postTemplateLabel_(ch.template) + " — " + postTemplateMeta_(ch.template).desc,
+    "🔐 دسترسی: " + (ch.access === "free" ? "رایگان برای همه" : "فقط اشتراک VIP"),
+    "📝 فوتر: " + (ch.footer || "—")
+  ];
+  const tplRows = [];
+  postTemplateKeys_().forEach(function(k) {
+    tplRows.push([{ text: (ch.template === k ? "✅ " : "") + postTemplateLabel_(k), callback_data: "pch:tpl:" + ch.id + ":" + k }]);
+  });
+  const rows = tplRows.concat([
+    [{ text: (ch.access === "free" ? "✅ رایگان" : "⬜️ رایگان") + " / " + (ch.access === "paid" ? "✅ VIP" : "⬜️ VIP"), callback_data: "pch:acc:" + ch.id }],
+    [{ text: "📝 ویرایش فوتر", callback_data: "pch:foot:" + ch.id }, { text: "👁 پیش‌نمایش قالب", callback_data: "pch:preview:" + ch.id }],
+    ch.isMain ? [{ text: "⚙️ کانال اصلی در تنظیمات", callback_data: "a:channel" }] : [{ text: ch.active ? "⏸ غیرفعال" : "▶️ فعال", callback_data: "pch:on:" + ch.id }, { text: "🗑 حذف", callback_data: "pch:del:" + ch.id }],
+    [{ text: "⬅️ بازگشت", callback_data: "pch:panel" }]
+  ]);
+  const text = lines.join("\n");
+  if (editMsgId) sendOrEditAdminPanel_(chatId, editMsgId, text, { inline_keyboard: rows });
+  else sendMessage_(chatId, text, { inline_keyboard: rows });
+}
+function setPublishChannelTemplate_(channelId, templateKey) {
+  const key = normalizeTemplateKey_(templateKey);
+  if (String(channelId) === "main") { setSetting_("MAIN_CHANNEL_TEMPLATE", key); return true; }
+  const ch = getPublishChannelRows_().find(function(c) { return c.id === String(channelId); });
+  if (!ch) return false;
+  savePublishChannel_({ channel_id: ch.id, template: key });
+  return true;
+}
+function setPublishChannelAccess_(channelId, access) {
+  const acc = access === "free" ? "free" : "paid";
+  if (String(channelId) === "main") { setSetting_("MAIN_CHANNEL_ACCESS", acc); return true; }
+  const ch = getPublishChannelRows_().find(function(c) { return c.id === String(channelId); });
+  if (!ch) return false;
+  savePublishChannel_({ channel_id: ch.id, access: acc });
+  return true;
+}
+function handlePublishChannelCallback_(cb) {
+  const uid = String(cb.from.id); const chatId = String(cb.message.chat.id);
+  const parts = String(cb.data || "").split(":"); const action = parts[1] || "";
+  const msgId = cb.message && cb.message.message_id ? cb.message.message_id : null;
+  if (!hasAdminPermission_(uid, "channel")) { answerCallbackQuery_(cb.id, "دسترسی نداری."); return; }
+  if (action === "panel") { answerCallbackQuery_(cb.id); showPublishChannelsPanel_(chatId, uid, msgId); return; }
+  if (action === "ch") { answerCallbackQuery_(cb.id); showPublishChannelDetail_(chatId, uid, parts[2] || "", msgId); return; }
+  if (action === "tpl") {
+    const ok = setPublishChannelTemplate_(parts[2] || "", parts[3] || "");
+    answerCallbackQuery_(cb.id, ok ? "✅ قالب ثبت شد" : "خطا");
+    showPublishChannelDetail_(chatId, uid, parts[2] || "", msgId); return;
+  }
+  if (action === "acc") {
+    const ch = getPublishChannelById_(parts[2] || "");
+    if (!ch) { answerCallbackQuery_(cb.id, "کانال نامعتبر"); return; }
+    setPublishChannelAccess_(ch.id, ch.access === "free" ? "paid" : "free");
+    answerCallbackQuery_(cb.id, "✅ ثبت شد");
+    showPublishChannelDetail_(chatId, uid, ch.id, msgId); return;
+  }
+  if (action === "foot") {
+    setSession_("M:" + uid, "ADM_PCH_FOOTER", { channelId: parts[2] || "" });
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, "📝 فوتر اختصاصی این کانال را بفرست (یا «-» برای حذف):", cancelKeyboard_()); return;
+  }
+  if (action === "on") {
+    const ch = getPublishChannelRows_().find(function(c) { return c.id === String(parts[2]); });
+    if (ch) savePublishChannel_({ channel_id: ch.id, active: ch.active ? "false" : "true" });
+    answerCallbackQuery_(cb.id, "ثبت شد");
+    showPublishChannelDetail_(chatId, uid, parts[2] || "", msgId); return;
+  }
+  if (action === "del") {
+    const ch = getPublishChannelById_(parts[2] || "");
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, "⚠️ حذف کانال «" + ((ch && ch.title) || parts[2]) + "»؟\nپست‌های قبلی در کانال تلگرام حذف نمی‌شوند؛ فقط از فهرست انتشار کنار می‌رود.", {
+      inline_keyboard: [[{ text: "🗑 حذف کن", callback_data: "pch:del2:" + parts[2] }, { text: "❌ انصراف", callback_data: "pch:ch:" + parts[2] }]]
+    });
+    return;
+  }
+  if (action === "del2") {
+    deletePublishChannel_(parts[2] || "");
+    answerCallbackQuery_(cb.id, "حذف شد");
+    showPublishChannelsPanel_(chatId, uid); return;
+  }
+  if (action === "add") {
+    setSession_("M:" + uid, "ADM_PCH_ADD", {});
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, "📡 آیدی یا یوزرنیم کانال را بفرست (مثل @mychannel یا -1001234567890).\nبات باید از قبل در آن کانال ادمین باشد.", cancelKeyboard_()); return;
+  }
+  if (action === "mode") {
+    const next = channelSelectionMode_() === "user" ? "admin" : "user";
+    setSetting_("CHANNEL_SELECTION_MODE", next);
+    answerCallbackQuery_(cb.id, next === "user" ? "هنرمند انتخاب می‌کند" : "مدیر تعیین می‌کند");
+    showPublishChannelsPanel_(chatId, uid, msgId); return;
+  }
+  if (action === "sync") {
+    answerCallbackQuery_(cb.id, "در حال بررسی…");
+    const n = ensureLegacyDestinationsMigrated_();
+    sendMessage_(chatId, n ? "✅ " + n + " کانال قدیمی منتقل شد." : "کانال قدیمی تازه‌ای پیدا نشد.");
+    showPublishChannelsPanel_(chatId, uid); return;
+  }
+  if (action === "preview") {
+    const ch = getPublishChannelById_(parts[2] || "");
+    if (!ch) { answerCallbackQuery_(cb.id, "کانال نامعتبر"); return; }
+    const sample = { id: "SAMPLE", mode: "simple", title: "نمونهٔ آهنگ", artists: "هنرمند نمونه", featuring: "", caption: "این یک پیش‌نمایش از متن قالب است.", links: [], platformVisible: {}, request: { details: {} } };
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, buildTemplateCaption_(sample, ch, { template: ch.template }), null, { parse_mode: "HTML" });
+    return;
+  }
+  answerCallbackQuery_(cb.id, "نامعتبر");
+}
+
+// ───────────────────────── پنل کاربر: لینک‌های من ─────────────────────────
+function showArtistLinksPanel_(chatId, uid, editMsgId) {
+  const links = getArtistLinks_(uid);
+  const platforms = artistLinkPlatforms_();
+  const lines = [t_(uid, "ARTIST_LINKS_TITLE"), ""];
+  if (!links.length) lines.push(t_(uid, "ARTIST_LINKS_EMPTY"));
+  platforms.forEach(function(platform) {
+    const meta = platformMeta_(platform);
+    const link = links.find(function(l) { return l.platform === platform; });
+    lines.push(meta.emoji + " " + meta.label + ": " + (link ? link.url + "  (v" + link.version + ")" : "—"));
+  });
+  const rows = [];
+  platforms.forEach(function(platform) {
+    const meta = platformMeta_(platform);
+    const link = links.find(function(l) { return l.platform === platform; });
+    if (link) {
+      rows.push([{ text: meta.emoji + " " + meta.label, callback_data: "lnk:noop" }, { text: "✏️", callback_data: "lnk:edit:" + platform }, { text: "🗂", callback_data: "lnk:hist:" + platform }, { text: "🗑", callback_data: "lnk:del:" + platform }]);
+    } else {
+      rows.push([{ text: "➕ " + meta.emoji + " " + meta.label, callback_data: "lnk:edit:" + platform }]);
+    }
+  });
+  rows.push([{ text: "🏠 منو", callback_data: "lnk:home" }]);
+  const text = lines.join("\n");
+  if (editMsgId) sendOrEditUserPanel_(chatId, editMsgId, text, { inline_keyboard: rows });
+  else sendMessage_(chatId, text, { inline_keyboard: rows });
+}
+function handleArtistLinksCallback_(cb) {
+  const uid = String(cb.from.id); const chatId = String(cb.message && cb.message.chat ? cb.message.chat.id : uid);
+  const parts = String(cb.data || "").split(":"); const action = parts[1] || "";
+  const platform = parts[2] || "";
+  const meta = platformMeta_(platform);
+  const msgId = cb.message && cb.message.message_id ? cb.message.message_id : null;
+  const user = getUserById_(uid);
+  if (!user) { answerCallbackQuery_(cb.id, t_(uid, "LOGIN_NEEDED")); sendEntryCard_(chatId); return; }
+  if (action === "noop") { answerCallbackQuery_(cb.id); return; }
+  if (action === "home") { answerCallbackQuery_(cb.id); showUserMenu_(chatId); return; }
+  if (action === "edit") {
+    setSession_("M:" + uid, "PERS_LINK_URL", { platform: platform });
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, t_(uid, "ARTIST_LINKS_ASK", { p: meta.label }), cancelKeyboard_());
+    return;
+  }
+  if (action === "hist") {
+    const versions = getArtistLinkHistory_(uid, platform);
+    if (!versions.length) { answerCallbackQuery_(cb.id, "تاریخچه‌ای نیست"); return; }
+    const lines = [t_(uid, "ARTIST_LINKS_HISTORY", { p: meta.label })];
+    versions.slice(0, 20).forEach(function(v) { lines.push(t_(uid, "ARTIST_LINKS_VERSION", { v: v.version, u: v.url }) + " · " + formatDate_(v.archivedAt) + " · " + (v.reason || "")); });
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, lines.join("\n"));
+    return;
+  }
+  if (action === "del") {
+    const ok = removeArtistLink_(uid, platform, "deleted_by_user");
+    answerCallbackQuery_(cb.id, ok ? t_(uid, "ARTIST_LINKS_DELETED", { p: meta.label }) : "لینکی نبود");
+    showArtistLinksPanel_(chatId, uid, msgId);
+    return;
+  }
+  answerCallbackQuery_(cb.id, t_(uid, "EXPIRED_BTN"));
+}
+
+// انتخاب کانال‌های یک ارسال توسط مدیر (بازنویسی پیش‌فرض)
+function showSubmissionChannelPicker_(chatId, uid, submissionId, editMsgId) {
+  const sub = getSubmission_(submissionId);
+  if (!sub) { sendMessage_(chatId, "ارسال پیدا نشد.", { inline_keyboard: [[{ text: "⬅️ بازگشت", callback_data: "a:submissions" }]] }); return; }
+  const all = activePublishChannels_();
+  const details = (sub.request && sub.request.details) || {};
+  const selected = Array.isArray(details.channels) && details.channels.length ? details.channels.map(String) : defaultChannelIdsForUser_(sub.userId).map(function(c) { return c.id; });
+  const lines = ["📡 «" + sub.title + "» در کدام کانال‌ها منتشر شود؟", "🎨 قالب و دسترسی هر کانال در «📡 کانال‌ها و قالب‌ها» تعیین می‌شود.", ""];
+  const rows = [];
+  all.forEach(function(c, i) {
+    const on = selected.indexOf(String(c.id)) >= 0;
+    lines.push((on ? "✅" : "⬜️") + " " + c.title + " · " + postTemplateLabel_(c.template) + (c.access === "free" ? " · رایگان" : " · VIP"));
+    rows.push([{ text: (on ? "✅ " : "⬜️ ") + truncate_(c.title, 30), callback_data: "a:subchtoggle:" + sub.id + ":" + i }]);
+  });
+  rows.push([{ text: "💾 ذخیره", callback_data: "a:subchsave:" + sub.id }, { text: "⬅️ بازگشت", callback_data: "a:sub:" + sub.id }]);
+  const text = lines.join("\n");
+  if (editMsgId) sendOrEditAdminPanel_(chatId, editMsgId, text, { inline_keyboard: rows });
+  else sendMessage_(chatId, text, { inline_keyboard: rows });
+}
+
+// گرفتن لینک‌های پلتفرم از هر پیام متنی وسط جریان ارسال و پرسیدن «مال خودت است؟»
+function captureArtistLinksFromText_(chatId, uid, draft, text) {
+  const links = parseLinks_(text);
+  if (!links.length) return 0;
+  if (!Array.isArray(draft.data.links)) draft.data.links = [];
+  if (!draft.data.artistLinks) draft.data.artistLinks = {};
+  let added = 0;
+  links.slice(0, 4).forEach(function(l) {
+    const platform = l.platform || platformFor_(l.url);
+    if (!platform) return;
+    if (!draft.data.links.some(function(x) { return x.url === l.url; })) { draft.data.links.push(l); added++; }
+    if (!draft.data.artistLinks[platform]) draft.data.artistLinks[platform] = { url: l.url, source: "manual" };
+    if (!getArtistLink_(uid, platform)) {
+      const meta = platformMeta_(platform);
+      sendMessage_(chatId, t_(uid, "ARTIST_LINKS_SAVE_PROFILE_Q", { p: meta.label }) + "\n" + l.url, {
+        inline_keyboard: [[
+          { text: t_(uid, "ARTIST_LINKS_SAVE_YES"), callback_data: "m:alsv:" + draft.draftId + ":" + platform },
+          { text: t_(uid, "ARTIST_LINKS_SAVE_NO"), callback_data: "m:alno:" + draft.draftId + ":" + platform }
+        ]]
+      });
+    }
+  });
+  if (added) { saveMusicDraft_(draft); sendMessage_(chatId, t_(uid, "LINK_ADDED", { n: added, t: draft.data.links.length })); }
+  return added;
 }
