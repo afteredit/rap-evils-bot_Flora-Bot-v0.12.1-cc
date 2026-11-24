@@ -106,7 +106,7 @@ const DEFAULT_SETTINGS = {
   FJ_TEXT: "🚸 برای استفاده از بات، ابتدا در کانال‌های زیر عضو شو و بعد «بررسی عضویت» را بزن.",
   BOT_MODE: "active", MAINTENANCE_TEXT: "🛠 بات موقتاً در حال به‌روزرسانی است. کمی بعد دوباره امتحان کن.",
   PUBLISH_MODE: "auto", PUBLISH_ENABLED: "true", PUBLISH_INTERVAL_MIN: "10",
-  CHANNEL_ID: "", CHANNEL_FOOTER: "", BOT_USERNAME: "", DEFAULT_COVER_FILE_ID: "",
+  CHANNEL_ID: "", CHANNEL_FOOTER: "", PUBLISH_DESTINATIONS: "", BOT_USERNAME: "", DEFAULT_COVER_FILE_ID: "",
   MUSIC_DOWNLOAD_DEFAULT_ENABLED: "true", // پیش‌فرض روشن برای همه پست‌ها — درخواست کاربر
   TIMEZONE: "Asia/Tehran",
   INACTIVE_AFTER_DAYS: "30", INACTIVE_REPEAT_DAYS: "90", BROADCAST_BATCH: "10",
@@ -650,7 +650,7 @@ const SETTINGS_CHOICE_OPTIONS_ = {
   BROADCAST_BATCH: { label: "اندازهٔ دستهٔ پیام همگانی", options: [5, 10, 20, 50].map(function(n) { return { value: String(n), label: String(n) }; }), allowCustom: true },
   TIMEZONE: { label: "منطقهٔ زمانی", options: [{ value: "Asia/Tehran", label: "تهران" }, { value: "Europe/Amsterdam", label: "آمستردام" }, { value: "UTC", label: "UTC" }], allowCustom: true }
 };
-const SETTINGS_CHANNEL_KEYS_ = ["CHANNEL_ID", "CHANNEL_FOOTER", "PUBLISH_MODE", "PUBLISH_ENABLED", "PUBLISH_INTERVAL_MIN", "BOT_USERNAME", "TIMEZONE", "STAGING_CHANNEL_ID"];
+const SETTINGS_CHANNEL_KEYS_ = ["CHANNEL_ID", "CHANNEL_FOOTER", "PUBLISH_DESTINATIONS", "PUBLISH_MODE", "PUBLISH_ENABLED", "PUBLISH_INTERVAL_MIN", "BOT_USERNAME", "TIMEZONE", "STAGING_CHANNEL_ID"];
 
 // اگر پستی نیمه‌کاره در کانال ماند، صف تا این مدت قفل می‌شود؛ بعد از آن صف ادامه می‌دهد تا کانال برای همیشه نخوابد.
 const PARTIAL_PUBLISH_LOCK_MINUTES_ = 30;
@@ -6289,6 +6289,62 @@ function resolvePublishChannel_(forPreview) {
   if (forPreview && staging) return staging;
   return String(getSetting_("CHANNEL_ID") || "").trim();
 }
+// کانال‌های ثانویه در تنظیمات با یک خط برای هر مقصد ذخیره می‌شوند:
+// channel_id | footer | template (placeholders: {title}, {artist}, {description}, {track})
+function publishDestinationsFromText_(text) {
+  const lines = String(text || "").split(/\r?\n/).map(function(x) { return x.trim(); }).filter(Boolean);
+  if (lines.length > 20) return { error: true };
+  for (let i = 0; i < lines.length; i++) {
+    const p = lines[i].split("|");
+    if (!String(p[0] || "").trim() || p.length < 3) return { error: true };
+  }
+  return { error: false };
+}
+function publishDestinations_() {
+  return String(getSetting_("PUBLISH_DESTINATIONS") || "").split(/\r?\n/).map(function(line) {
+    const p = line.split("|");
+    const id = String(p.shift() || "").trim();
+    if (!id || id.charAt(0) === "#") return null;
+    return { id: id, footer: String(p.shift() || "").trim(), template: String(p.join("|") || "{title}\n{artist}\n{description}").trim() };
+  }).filter(Boolean).filter(function(x, i, all) { return all.findIndex(function(y) { return y.id === x.id; }) === i; }).slice(0, 20);
+}
+function showSubmissionDestinations_(chatId, uid, id, editMsgId) {
+  const sub = getSubmission_(id); if (!sub) return;
+  const destinations = publishDestinations_();
+  if (!destinations.length) {
+    sendMessage_(chatId, "هیچ کانال ثانویه تنظیم نشده. در «کانال انتشار» مقدار کانال‌ها را با قالب «شناسه | فوتر | قالب پیام» اضافه کن.", { inline_keyboard: [[{ text: "⬅️ برگشت", callback_data: "a:sub:" + id }]] });
+    return;
+  }
+  const details = sub.request && sub.request.details || {};
+  const selected = Array.isArray(details.destinations) ? details.destinations.map(String) : [];
+  const rows = destinations.map(function(d, i) { return [{ text: (selected.indexOf(d.id) >= 0 ? "✅ " : "⬜️ ") + d.id, callback_data: "a:desttoggle:" + id + ":" + i }]; });
+  rows.push([{ text: "✅ ذخیره و تأیید", callback_data: "a:destapprove:" + id }]);
+  rows.push([{ text: "⬅️ برگشت", callback_data: "a:sub:" + id }]);
+  sendOrEditAdminPanel_(chatId, editMsgId, "📺 کانال‌های مقصد این اثر را انتخاب کن. کانال اصلی همیشه ارسال می‌شود؛ کانال‌های انتخابی فایل صوتی و قالب اختصاصی خودشان را می‌گیرند (بدون کاور).", { inline_keyboard: rows });
+}
+function publishSelectedDestinations_(sub, stage) {
+  const details = sub.request && sub.request.details || {};
+  const selected = Array.isArray(details.destinations) ? details.destinations.map(String) : [];
+  if (!selected.length) return;
+  const destinations = publishDestinations_().filter(function(d) { return selected.indexOf(d.id) >= 0; });
+  const tracks = getMusicLibrary_().filter(function(t) { return t.submissionId === sub.id && t.fileId; }).sort(function(a, b) { return a.seq - b.seq; });
+  if (!tracks.length) return;
+  if (!stage.destinationSent) stage.destinationSent = {};
+  destinations.forEach(function(d) {
+    const sent = stage.destinationSent[d.id] || [];
+    tracks.forEach(function(track, i) {
+      const key = String(track.trackId || track.seq || i + 1);
+      if (sent.indexOf(key) >= 0) return;
+      let text = (d.template || "{title}\n{artist}\n{description}").replace(/\\n/g, "\n");
+      const values = { title: track.title || sub.title, artist: formatArtistNames_(sub.artists), description: sub.caption || "", track: String(i + 1) };
+      Object.keys(values).forEach(function(k) { text = text.replace(new RegExp("\\{" + k + "\\}", "g"), String(values[k] || "")); });
+      text = (text + (d.footer ? "\n\n" + d.footer : "")).trim().slice(0, 1024);
+      const result = telegramRequest_("sendAudio", { chat_id: d.id, audio: track.fileId, caption: text || String(track.title || sub.title).slice(0, 1024) });
+      if (!result || !result.ok) throw new Error("ارسال به کانال ثانویه " + d.id + " ناموفق: " + String(result && result.description || ""));
+      sent.push(key); stage.destinationSent[d.id] = sent; savePublishStage_(sub, stage);
+    });
+  });
+}
 function publishOneSubmission_(sub) {
   const channel = normalizeChannelId_(getSetting_("CHANNEL_ID"));
   if (!channel) { console.error("CHANNEL_ID نامعتبر است"); return false; }
@@ -6318,6 +6374,8 @@ function publishOneSubmission_(sub) {
     else if (!stage.visual) publishVisualStage_(sub, stage, channel);
     if (["coming_soon", "coming_next"].indexOf(String(sub.mode)) < 0 && !stage.freestylePosted) publishAudioStage_(sub, stage, channel);
     else if (!stage.text && !stage.visual && !stage.freestylePosted) publishTextStage_(sub, stage, channel);
+    // کانال‌های ثانویه فقط پس از انتشار موفق کانال اصلی و طبق انتخاب مدیر منتشر می‌شوند.
+    publishSelectedDestinations_(sub, stage);
     const finished = new Date();
     setSubmissionField_(sub.id, "status", "published");
     setSubmissionField_(sub.id, "publishedAt", finished);
@@ -7668,10 +7726,12 @@ function showSettingEditor_(chatId, uid, rowIndex) {
 }
 function showChannelPanel_(chatId, uid) {
   if (!adminGate_(chatId, uid, "channel")) return;
-  const lines = ["📺 کانال انتشار", "🆔 " + (getSetting_("CHANNEL_ID") || "—"), "🧪 کانال آزمایشی: " + (getSetting_("STAGING_CHANNEL_ID") || "—"), "🔗 " + (getSetting_("BOT_USERNAME") ? "@" + String(getSetting_("BOT_USERNAME")).replace(/^@/, "") : "—"), "🔁 حالت: " + (getSetting_("PUBLISH_MODE") || "auto") + " · فعال: " + (getSetting_("PUBLISH_ENABLED") || "true"), "⏱ فاصله: " + (getSetting_("PUBLISH_INTERVAL_MIN") || "10") + " دقیقه", "📝 فوتر: " + (getSetting_("CHANNEL_FOOTER") || "—")];
+  const secondaryCount = publishDestinations_().length;
+  const lines = ["📺 کانال انتشار", "🆔 " + (getSetting_("CHANNEL_ID") || "—"), "➕ کانال‌های ثانویه: " + secondaryCount + "\nفرمت هر خط: شناسه | فوتر | قالب ({title} {artist} {description} {track})", "🧪 کانال آزمایشی: " + (getSetting_("STAGING_CHANNEL_ID") || "—"), "🔗 " + (getSetting_("BOT_USERNAME") ? "@" + String(getSetting_("BOT_USERNAME")).replace(/^@/, "") : "—"), "🔁 حالت: " + (getSetting_("PUBLISH_MODE") || "auto") + " · فعال: " + (getSetting_("PUBLISH_ENABLED") || "true"), "⏱ فاصله: " + (getSetting_("PUBLISH_INTERVAL_MIN") || "10") + " دقیقه", "📝 فوتر: " + (getSetting_("CHANNEL_FOOTER") || "—")];
   sendMessage_(chatId, lines.join("\n"), { inline_keyboard: [
     [{ text: "🆔 تغییر کانال", callback_data: "set:custom:" + rowOfSetting_("CHANNEL_ID") }],
     [{ text: "📝 فوتر پست", callback_data: "set:custom:" + rowOfSetting_("CHANNEL_FOOTER") }],
+    [{ text: "➕ تنظیم کانال‌های ثانویه", callback_data: "set:custom:" + rowOfSetting_("PUBLISH_DESTINATIONS") }],
     [{ text: "🔁 حالت انتشار", callback_data: "set:edit:" + rowOfSetting_("PUBLISH_MODE") }],
     [{ text: "⏱ فاصله", callback_data: "set:edit:" + rowOfSetting_("PUBLISH_INTERVAL_MIN") }],
     [{ text: "🆔 یوزرنیم ربات", callback_data: "set:custom:" + rowOfSetting_("BOT_USERNAME") }],
@@ -7802,7 +7862,7 @@ function handleAdminCallback_(cb) {
       };
       if (simple[rest]) { simple[rest](); return; }
       if (rest.indexOf("settings") === 0) { answerCallbackQuery_(cb.id); showSettingsPanel_(chatId, uid, Number(parts[2]) || 0, ""); return; }
-      if (/^(sub|comingsoon|freestyle|downloadtoggle|delapprove|delreject)/.test(rest)) { handleSubmissionCallback_(cb, parts); return; }
+      if (/^(sub|desttoggle|destapprove|comingsoon|freestyle|downloadtoggle|delapprove|delreject)/.test(rest)) { handleSubmissionCallback_(cb, parts); return; }
       if (/^(users|list|user|usersearch)/.test(rest)) { handleUsersCallback_(cb, parts); return; }
       if (/^(admins|adminadd|admindel|adminrole)/.test(rest)) { handleAdminsCallback_(cb, parts); return; }
       if (/^resets?/.test(rest)) { handleResetCallback_(cb, parts); return; }
@@ -7855,7 +7915,8 @@ function handleSettingCallback_(cb, parts) {
     if (!hasAdminPermission_(uid, adminPermissionForSettingKey_(setting.key))) { answerCallbackQuery_(cb.id, "دسترسی نداری."); return; }
     setSession_("M:" + uid, "ADM_SETTING_VALUE", { key: setting.key, row: setting.row });
     answerCallbackQuery_(cb.id);
-    sendMessage_(chatId, "✏️ مقدار جدید برای «" + setting.key + "» را بفرست:\nمقدار فعلی: " + truncate_(setting.value || "—", 200), cancelKeyboard_()); return;
+    const help = setting.key === "PUBLISH_DESTINATIONS" ? "\nهر خط یک کانال: شناسه | فوتر اختصاصی | قالب پیام\nنمونه: -1001234567890 | لینک‌های ما | {title}\\n{artist}\\n{description}\nجای‌نگهدارها: {title} {artist} {description} {track}. فایل صوتی ارسال می‌شود و کاور نه. برای پاک کردن همه، بفرست: -\n" : "\n";
+    sendMessage_(chatId, "✏️ مقدار جدید برای «" + setting.key + "» را بفرست:" + help + "مقدار فعلی: " + truncate_(setting.value || "—", 500), cancelKeyboard_()); return;
   }
   if (action === "del") {
     const setting = getAllSettings_().find(function(s) { return s.row === row; });
@@ -7964,6 +8025,7 @@ function showSubmissionDetail_(chatId, uid, submissionId, editMsgId) {
   if (sub.reviewNote) lines.push("📝 یادداشت بررسی: " + truncate_(sub.reviewNote, 200));
   if (sub.links && sub.links.length) lines.push("🔗 لینک‌ها:\n" + sub.links.map(function(l) { return "• " + platformMeta_(l.platform).label + ": " + l.url; }).join("\n"));
   const rows = [];
+  if (publishDestinations_().length && ["pending", "approved", "failed", "rejected"].indexOf(sub.status) >= 0) rows.push([{ text: "📺 انتخاب کانال‌های انتشار", callback_data: "a:subdest:" + sub.id }]);
   if (sub.status === "pending") rows.push([{ text: "✅ تأیید", callback_data: "a:subapprove:" + sub.id }, { text: "❌ رد", callback_data: "a:subreject:" + sub.id }]);
   if (sub.status === "approved") rows.push([{ text: "🚀 انتشار فوری", callback_data: "a:subpub:" + sub.id }, { text: "🗓 تغییر زمان", callback_data: "a:subtime:" + sub.id }]);
   if (sub.status === "publishing") rows.push([{ text: "⏹ توقف انتشار", callback_data: "a:substop:" + sub.id }]);
@@ -8029,7 +8091,34 @@ function handleSubmissionCallback_(cb, parts) {
     startAdminEdit_(chatId, uid, sub, field, parts[4] || "");
     return;
   }
+  if (action === "subdest") { answerCallbackQuery_(cb.id); showSubmissionDestinations_(chatId, uid, id, msgId); return; }
+  if (action === "desttoggle") {
+    const index = Number(parts[3]); const destinations = publishDestinations_(); const dest = destinations[index];
+    if (!dest) { answerCallbackQuery_(cb.id, "کانال پیدا نشد؛ تنظیمات را دوباره بررسی کن."); return; }
+    const details = sub.request && sub.request.details || {};
+    const selected = Array.isArray(details.destinations) ? details.destinations.map(String) : [];
+    const at = selected.indexOf(dest.id); if (at >= 0) selected.splice(at, 1); else selected.push(dest.id);
+    setSubmissionDetails_(id, { destinations: selected });
+    answerCallbackQuery_(cb.id); showSubmissionDestinations_(chatId, uid, id, msgId); return;
+  }
+  if (action === "destapprove") {
+    const details = sub.request && sub.request.details || {};
+    if (!Array.isArray(details.destinations)) { setSubmissionDetails_(id, { destinations: [] }); }
+    if (sub.status === "pending") {
+      withLock_(function() {
+        setSubmissionField_(id, "status", "approved");
+        const at = dateMillis_(sub.scheduledAt);
+        if (!at || at < nowMs_()) setSubmissionField_(id, "scheduledAt", computeNextSlot_(getSetting_("PUBLISH_INTERVAL_MIN")));
+        setSubmissionField_(id, "reviewNote", ""); setSubmissionField_(id, "reviewedBy", uid);
+      });
+      sub.status = "approved";
+      notifySubmissionOwner_(sub, t_(sub.userId, "PUBLISH_REVIEW_OK", { t: sub.title }));
+    }
+    logAdminAction_(uid, "sub_destinations", id, (sub.request.details.destinations || []).join(","));
+    answerCallbackQuery_(cb.id, "✅ انتخاب ذخیره شد"); showSubmissionDetail_(chatId, uid, id); return;
+  }
   if (action === "subapprove") {
+    if (publishDestinations_().length) { answerCallbackQuery_(cb.id); showSubmissionDestinations_(chatId, uid, id, msgId); return; }
     withLock_(function() {
       setSubmissionField_(id, "status", "approved");
       // زمان انتخابیِ هنرمند پاک نمی‌شود؛ فقط اگر در گذشته است یا خالی است، اسلات بعدی گذاشته می‌شود.
@@ -8704,6 +8793,12 @@ function handleAdminState_(message, session) {
       setSetting_(key, channel); logAdminAction_(uid, "set", key, channel);
       if (key === "CHANNEL_ID") CHANNEL_LINK_MEMO_ = null;
       finish("📺 کانال ثبت شد: " + channel); return;
+    }
+    if (key === "PUBLISH_DESTINATIONS") {
+      const value = text.trim() === "-" ? "" : text;
+      if (publishDestinationsFromText_(value).error) { sendMessage_(chatId, "فرمت نامعتبر است. هر خط باید «شناسه | فوتر | قالب» باشد.", cancelKeyboard_()); return; }
+      setSetting_(key, value); logAdminAction_(uid, "set", key, "destinations=" + publishDestinations_().length);
+      finish("✅ کانال‌های ثانویه ذخیره شدند: " + publishDestinations_().length); return;
     }
     if (["PUBLISH_INTERVAL_MIN", "INACTIVE_AFTER_DAYS", "INACTIVE_REPEAT_DAYS", "BROADCAST_BATCH", "MUSIC_PREVIEW_SECONDS", "MUSIC_DOWNLOAD_DELETE_SECONDS", "MAX_SUBMISSIONS_PER_DAY", "MAX_COVER_PHOTOS", "MAX_AUDIO_FILES", "MAX_AUDIO_MB", "RATE_MSG_PER_MIN", "RATE_SUBMITS_PER_HOUR", "RATE_DOWNLOADS_PER_HOUR", "LOGIN_TTL_DAYS", "SESSION_TTL_HOURS", "AUTO_DELETE_DRAFTS_DAYS", "PREVIEW_ANALYZE_MAX_MB", "PREVIEW_HEAD_BYTES", "PREVIEW_PROBE_BYTES", "PREVIEW_PROBE_COUNT", "PREVIEW_PEAK_SKIP_SECONDS", "PREVIEW_PEAK_POSITION_PCT", "PREVIEW_TAG_KEEP_BYTES", "MAX_GENRE_TAGS", "MAX_POST_HASHTAGS", "MUSIC_PAGE_SIZE", "CLEANUP_INTERVAL_HOURS"].indexOf(key) >= 0) {
       const n = Number(normalizeDigits_(text));
