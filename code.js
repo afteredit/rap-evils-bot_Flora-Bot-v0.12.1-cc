@@ -2532,6 +2532,23 @@ function handleMessage_(message) {
   if (!message || !message.chat || !message.from || message.chat.type !== "private") return;
   const chatId = String(message.chat.id); const uid = String(message.from.id); const text = String(message.text || "").trim();
   learnIdentity_(message.from);
+  // Give the submissions menu a direct route before rate limits or pending admin
+  // input states can swallow the reply-keyboard tap. The normal menu dispatcher
+  // runs later, after rate limiting, and used to make this button appear inert.
+  if (text === "🎵 ارسال‌ها" && isAdmin_(uid)) {
+    if (!isAdminAuthenticated_(uid)) { requireAdminAuthentication_(chatId, uid); return; }
+    if (isAdminSessionStale_(uid)) { logoutUser_(uid); clearSession_("M:" + uid); requireAdminAuthentication_(chatId, uid, t_(uid, "ADMIN_SESSION_EXPIRED")); return; }
+    touchAdminSession_(uid);
+    const menuSession = getSession_("M:" + uid);
+    if (menuSession && String(menuSession.state).indexOf("MUSIC_") === 0) cancelMusicDraft_(uid, menuSession);
+    else if (menuSession) clearSession_("M:" + uid);
+    try { showAdminSubmissions_(chatId, uid, "all", 0); }
+    catch (menuError) {
+      logError_("admin_submissions_menu", menuError, { userId: uid });
+      sendMessage_(chatId, "❌ باز کردن ارسال‌ها ناموفق شد: " + truncate_(menuError && menuError.message || menuError, 250), adminKeyboard_());
+    }
+    return;
+  }
   if (text.indexOf("/claim") === 0) { handleClaim_(message, text); return; }
   if (isLanguageCommand_(text)) { showLanguagePicker_(chatId, uid); return; }
   const startCommand = text.match(/^\/start(?:@[A-Za-z0-9_]+)?(?:\s+([A-Za-z0-9_.-]{1,120}))?$/i);
