@@ -12095,6 +12095,7 @@ function approvePaymentRequest_(requestId, adminId, note) {
   const req = getPaymentRequests_().find(function(r) { return r.id === String(requestId); });
   if (!req) return false;
   if (req.status === "approved") return true;
+  if (req.status !== "pending") return false; // درخواست رد‌شده دوباره فعال نمی‌شود
   const plan = getPlanById_(req.planId);
   if (!plan) return false;
   const granted = grantSubscription_(req.userId, plan.id, adminId, note, req.id);
@@ -12108,6 +12109,7 @@ function approvePaymentRequest_(requestId, adminId, note) {
 function rejectPaymentRequest_(requestId, adminId, note) {
   const req = getPaymentRequests_().find(function(r) { return r.id === String(requestId); });
   if (!req) return false;
+  if (req.status !== "pending") return false;
   setPaymentRequestStatus_(req.id, "rejected", adminId, note || "");
   logAdminAction_(adminId, "vip_payment_reject", req.userId, req.id + " · " + note);
   sendMessage_(req.userId, t_(req.userId, "VIP_PAY_REJECTED", { note: note ? "\n📝 " + note : "" }));
