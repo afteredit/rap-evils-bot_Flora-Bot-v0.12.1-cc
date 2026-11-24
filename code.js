@@ -6249,7 +6249,8 @@ function publishQueueJob() {
 function ensureWorkersReady_(force) {
   try {
     const cache = CacheService.getScriptCache();
-    if (!force && cache.get("workers_ready_ok")) return;
+    // Always verify: Apps Script trigger service can temporarily fail, and a
+    // previous cached success must not prevent later repair of a missing trigger.
     const raw = safeGetProjectTriggers_();
     if (!raw) return;
     const triggers = raw.map(function(t) { try { return t.getHandlerFunction(); } catch (e) { return ""; } });
@@ -6265,8 +6266,20 @@ function ensureWorkersReady_(force) {
       try { ScriptApp.newTrigger("cleanupJob").timeBased().everyHours(6).create(); } catch (e) {}
     }
     if (String(getSetting_("BACKUP_ENABLED") || "false") === "true") ensureWeeklyBackupTrigger_();
-    cache.put("workers_ready_ok", "1", 21600);
+    // Do not cache a successful check unless creation actually succeeded. Trigger
+    // service failures are transient; caching here used to suppress retries for
+    // six hours and silently leave the publish queue without a worker.
+    const verified = safeGetProjectTriggers_();
+    if (!verified) return;
+    const verifiedHandlers = verified.map(function(t) { try { return t.getHandlerFunction(); } catch (e) { return ""; } });
+    const required = ["broadcastQueueJob", "cleanupJob"];
+    if (String(getSetting_("QUEUE_ENABLED") || "true") === "true") required.push("publishQueueJob");
+    const allReady = required.every(function(handler) { return verifiedHandlers.indexOf(handler) >= 0; });
+    if (allReady) cache.put("workers_ready_ok", "1", 21600);
+    else cache.remove("workers_ready_ok");
   } catch (e) {
+    // Keep the cache empty so the next scheduled run retries provisioning.
+    try { CacheService.getScriptCache().remove("workers_ready_ok"); } catch (ignored) {}
     console.warn("[FloraBot] ensureWorkersReady_: " + (e && e.message || e));
   }
 }
