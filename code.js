@@ -2532,6 +2532,23 @@ function handleMessage_(message) {
   if (!message || !message.chat || !message.from || message.chat.type !== "private") return;
   const chatId = String(message.chat.id); const uid = String(message.from.id); const text = String(message.text || "").trim();
   learnIdentity_(message.from);
+  // Give the submissions menu a direct route before rate limits or pending admin
+  // input states can swallow the reply-keyboard tap. The normal menu dispatcher
+  // runs later, after rate limiting, and used to make this button appear inert.
+  if (text === "🎵 ارسال‌ها" && isAdmin_(uid)) {
+    if (!isAdminAuthenticated_(uid)) { requireAdminAuthentication_(chatId, uid); return; }
+    if (isAdminSessionStale_(uid)) { logoutUser_(uid); clearSession_("M:" + uid); requireAdminAuthentication_(chatId, uid, t_(uid, "ADMIN_SESSION_EXPIRED")); return; }
+    touchAdminSession_(uid);
+    const menuSession = getSession_("M:" + uid);
+    if (menuSession && String(menuSession.state).indexOf("MUSIC_") === 0) cancelMusicDraft_(uid, menuSession);
+    else if (menuSession) clearSession_("M:" + uid);
+    try { showAdminSubmissions_(chatId, uid, "all", 0); }
+    catch (menuError) {
+      logError_("admin_submissions_menu", menuError, { userId: uid });
+      sendMessage_(chatId, "❌ باز کردن ارسال‌ها ناموفق شد: " + truncate_(menuError && menuError.message || menuError, 250), adminKeyboard_());
+    }
+    return;
+  }
   if (text.indexOf("/claim") === 0) { handleClaim_(message, text); return; }
   if (isLanguageCommand_(text)) { showLanguagePicker_(chatId, uid); return; }
   const startCommand = text.match(/^\/start(?:@[A-Za-z0-9_]+)?(?:\s+([A-Za-z0-9_.-]{1,120}))?$/i);
@@ -7619,7 +7636,7 @@ function handleAdminMenuMessage_(message) {
   const routes = [
     ["🎵 ارسال موزیک", "submissions", function() { startMusicFlow_(chatId, uid, "simple"); }],
     ["🎼 ارسال آلبوم", "submissions", function() { startMusicFlow_(chatId, uid, "album"); }],
-    ["🎵 ارسال‌ها", "submissions", function() { showAdminSubmissions_(chatId, uid, "pending", 0); }],
+    ["🎵 ارسال‌ها", "submissions", function() { showAdminSubmissions_(chatId, uid, "all", 0); }],
     ["🗓 صف انتشار", "submissions", function() { showAdminSubmissions_(chatId, uid, "queue", 0); }],
     ["⏳ Coming Soon", "submissions", function() { showComingSoonPanel_(chatId, uid); }],
     ["🎤 فری‌استایل", "submissions", function() { startMusicFlow_(chatId, uid, "freestyle"); }],
@@ -7973,15 +7990,17 @@ function showAdminSubmissions_(chatId, uid, filter, page, editMsgId) {
   let list;
   if (filter === "queue") list = all.filter(function(s) { return s.status === "approved" || s.status === "publishing" || s.status === "failed"; });
   else if (filter === "published") list = all.filter(function(s) { return s.status === "published"; });
-  else list = all.filter(function(s) { return s.status === "pending"; });
+  else if (filter === "pending") list = all.filter(function(s) { return s.status === "pending"; });
+  else list = all;
   const size = 8; const pages = Math.max(1, Math.ceil(list.length / size)); const p = Math.max(0, Math.min(Number(page) || 0, pages - 1));
   const rows = list.slice(p * size, p * size + size).map(function(s) {
     return [{ text: (SUB_STATUS_LABELS_[s.status] || s.status) + " · «" + truncate_(s.title, 22) + "» · " + s.mode, callback_data: "a:sub:" + s.id }];
   });
-  rows.push([{ text: "⏳ در انتظار", callback_data: "a:submissions:0" }, { text: "🗓 صف", callback_data: "a:sub:queue" }, { text: "✅ منتشر", callback_data: "a:sub:published" }]);
+  rows.push([{ text: "📚 همه", callback_data: "a:sub:all:0" }, { text: "⏳ در انتظار", callback_data: "a:sub:pending:0" }]);
+  rows.push([{ text: "🗓 صف", callback_data: "a:sub:queue" }, { text: "✅ منتشر", callback_data: "a:sub:published" }]);
   if (pages > 1) rows.push([{ text: "◀️", callback_data: "a:sub:" + filter + ":" + Math.max(0, p - 1) }, { text: (p + 1) + "/" + pages, callback_data: "a:sub:" + filter + ":" + p }, { text: "▶️", callback_data: "a:sub:" + filter + ":" + Math.min(pages - 1, p + 1) }]);
   rows.push([{ text: "🔍 جست‌وجوی آثار", callback_data: "a:subsearch" }, { text: "🏠 منو", callback_data: "a:home" }]);
-  sendOrEditAdminPanel_(chatId, editMsgId, "🎵 ارسال‌ها — " + ({ queue: "صف انتشار", published: "منتشرشده" }[filter] || "در انتظار تأیید") + " (" + list.length + ")", { inline_keyboard: rows });
+  sendOrEditAdminPanel_(chatId, editMsgId, "🎵 ارسال‌ها — " + ({ all: "همه", pending: "در انتظار تأیید", queue: "صف انتشار", published: "منتشرشده" }[filter] || "همه") + " (" + list.length + ")", { inline_keyboard: rows });
 }
 function showAdminSubmissionsSearch_(chatId, uid, query) {
   if (!adminGate_(chatId, uid, "submissions")) return;
@@ -8049,7 +8068,7 @@ function handleSubmissionCallback_(cb, parts) {
   const uid = String(cb.from.id); const chatId = String(cb.message.chat.id);
   const msgId = cb.message && cb.message.message_id ? cb.message.message_id : null;
   const action = parts[1] || "";
-  if (action === "submissions") { answerCallbackQuery_(cb.id); showAdminSubmissions_(chatId, uid, "pending", 0, msgId); return; }
+  if (action === "submissions") { answerCallbackQuery_(cb.id); showAdminSubmissions_(chatId, uid, "all", 0, msgId); return; }
   if (action === "subsearch") {
     answerCallbackQuery_(cb.id);
     setSession_("M:" + uid, "ADM_SUB_SEARCH", {});
