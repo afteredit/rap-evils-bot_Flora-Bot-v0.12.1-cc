@@ -8,7 +8,7 @@
  * نسخه: 0.14.0-cc — پنل مدیریت مرحله‌ای و دکمه‌محور (داشبورد ۸ دسته‌ای + مرکز تنظیمات هوشمند)
  */
 const APP = {
-  VERSION: "0.14.0-cc",
+  VERSION: "0.15.0-cc",
   TZ: "Asia/Tehran",
   SHEETS: {
     SETTINGS: "Settings", USERS: "Users", SESSIONS: "Sessions", STARTS: "Starts",
@@ -27,7 +27,8 @@ const APP = {
     PAYMENT_REQUESTS: "PaymentRequests",
     ARTIST_LINKS: "ArtistLinks",
     ARTIST_LINKS_HISTORY: "ArtistLinksHistory",
-    DELIVERY_LOG: "DeliveryLog", ADMIN_LOG: "AdminLog", ERROR_LOG: "ErrorLog"
+    DELIVERY_LOG: "DeliveryLog", ADMIN_LOG: "AdminLog", ERROR_LOG: "ErrorLog",
+    ADS: "Ads"
   }
 };
 
@@ -63,6 +64,7 @@ let DEFAULT_COVER_BLOB_MEMO_ = null;
 let CHANNEL_LINK_MEMO_ = null;
 let PUBLISH_CHANNELS_MEMO_ = null;
 let SUBMISSION_CHANNELS_MEMO_ = null;
+let ADS_MEMO_ = null;
 let PLANS_MEMO_ = null;
 let SUBSCRIPTIONS_MEMO_ = null;
 let PAYMENT_REQUESTS_MEMO_ = null;
@@ -83,6 +85,7 @@ function resetRuntimeCaches_() {
   PUBLISH_CHANNELS_MEMO_ = null; SUBMISSION_CHANNELS_MEMO_ = null;
   PLANS_MEMO_ = null; SUBSCRIPTIONS_MEMO_ = null; PAYMENT_REQUESTS_MEMO_ = null;
   ARTIST_LINKS_MEMO_ = null; ARTIST_LINKS_HISTORY_MEMO_ = null;
+  ADS_MEMO_ = null;
 }
 
 const HEADERS = {
@@ -115,7 +118,8 @@ const HEADERS = {
   PaymentRequests: ["request_id", "user_id", "plan_id", "plan_name", "amount", "ref_code", "receipt_file_id", "status", "admin_note", "created_at", "reviewed_by", "reviewed_at"],
   ArtistLinks: ["user_id", "platform", "url", "version", "source", "updated_at"],
   ArtistLinksHistory: ["user_id", "platform", "version", "url", "source", "archived_at", "reason"],
-  ErrorLog: ["log_id", "where", "message", "extra", "user_id", "created_at"]
+  ErrorLog: ["log_id", "where", "message", "extra", "user_id", "created_at"],
+  Ads: ["ad_id", "slot", "kind", "content", "caption", "button_text", "button_url", "active", "weight", "starts_at", "ends_at", "impressions", "clicks", "created_at"]
 };
 
 const DEFAULT_SETTINGS = {
@@ -131,6 +135,15 @@ const DEFAULT_SETTINGS = {
   BOT_MODE: "active", MAINTENANCE_TEXT: "🛠 بات موقتاً در حال به‌روزرسانی است. کمی بعد دوباره امتحان کن.",
   PUBLISH_MODE: "auto", PUBLISH_ENABLED: "true", PUBLISH_INTERVAL_MIN: "10",
   CHANNEL_ID: "", CHANNEL_FOOTER: "", PUBLISH_DESTINATIONS: "", BOT_USERNAME: "", DEFAULT_COVER_FILE_ID: "",
+  // ── نسخهٔ ۰.۱۵: تبلیغات — همه پیش‌فرض خاموش ──
+  ADS_ENABLED: "false",            // کلید اصلی: تا این false باشد هیچ تبلیغی هیچ‌جا نشان داده نمی‌شود
+  ADS_IN_DOWNLOAD: "false",        // تبلیغ بعد از ارسال فایل کامل موزیک
+  ADS_IN_CAPTION: "false",         // تبلیغ در متن کپشن فایل موزیک
+  ADS_IN_MENU: "false",            // تبلیغ زیر منوی اصلی کاربر
+  ADS_IN_MESSAGES: "false",        // تبلیغ در انتهای پیام‌های عمومی
+  ADS_IN_CHANNEL_POST: "false",    // تبلیغ در کپشن پست کانال
+  ADS_MAX_PER_HOUR: "3",           // سقف نمایش تبلیغ به هر کاربر در ساعت (ضد آزار)
+  ADS_FOOTER_TEXT: "",             // متن ثابت تبلیغ که به کپشن‌ها اضافه می‌شود
   // ── نسخهٔ ۰.۱۳ ── انتشار چندکاناله، قالب‌های پست و اشتراک VIP
   MULTI_CHANNEL_ENABLED: "true",
   // قالب کانال اصلی: classic | story | audio_only | full_track | vip
@@ -1504,6 +1517,7 @@ function setupProject() {
   }
   ensureMusicDownloadDefaultMigration_();
   ensureV014Settings_();
+  ensureV015AdsSchema_();
   try { getSubscriptionPlans_(); } catch (e) {}
   try { ensureLegacyDestinationsMigrated_(); } catch (e) {}
   if (!getSetting_("CLAIM_CODE")) setSetting_("CLAIM_CODE", generateClaimCode_());
@@ -1562,6 +1576,20 @@ function ensureV014Settings_() {
     });
     props.setProperty("V014_SETTINGS", "1");
   } catch (e) { console.warn("ensureV014Settings_: " + (e && e.message || e)); }
+}
+// نسخهٔ ۰.۱۵: شیت Ads + کلیدهای تنظیمات تبلیغات (همه خاموش).
+// مثل بقیهٔ مایگریشن‌ها یک‌بار اجرا می‌شود و با ScriptProperty علامت می‌خورد.
+function ensureV015AdsSchema_() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty("V015_ADS_SCHEMA") === "1") return;
+    ensureSheet_(APP.SHEETS.ADS, HEADERS.Ads);
+    ["ADS_ENABLED", "ADS_IN_DOWNLOAD", "ADS_IN_CAPTION", "ADS_IN_MENU", "ADS_IN_MESSAGES",
+     "ADS_IN_CHANNEL_POST", "ADS_MAX_PER_HOUR", "ADS_FOOTER_TEXT"].forEach(function(key) {
+      if (getSetting_(key) === "" && Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, key)) setSetting_(key, DEFAULT_SETTINGS[key]);
+    });
+    props.setProperty("V015_ADS_SCHEMA", "1");
+  } catch (e) { console.warn("ensureV015AdsSchema_: " + (e && e.message || e)); }
 }
 function ensureV013Schema_() {
   try {
@@ -2252,6 +2280,7 @@ function adminPermissionForCallback_(data) {
   if (d.indexOf("d:usr:") === 0) return "users";
   if (d.indexOf("d:sup:") === 0) return "support";
   if (d.indexOf("d:adv:") === 0) return "broadcast";
+  if (d.indexOf("d:ads:") === 0) return "broadcast";
   return "settings";
   if (d.indexOf("pch:") === 0) return "channel";
   return "settings";
@@ -2261,6 +2290,7 @@ function adminPermissionForState_(state, stateData) {
   if (s === "ADM_SETTING_VALUE" && stateData && stateData.key) return adminPermissionForSettingKey_(stateData.key);
   if (s === "ADM_SUPPORT_REPLY") return "support";
   if (s.indexOf("ADM_BROADCAST_") === 0) return "broadcast";
+  if (s.indexOf("ADM_AD_") === 0) return "broadcast";
   if (s.indexOf("ADM_ADMIN_") === 0) return "admins";
   if (s === "ADM_POST_TIME" || s === "ADM_SUB_SEARCH") return "submissions";
   // ویرایش دستی اثر (متن‌ها و رسانه‌ها) بخشی از گردش کار ارسال‌هاست
@@ -2474,6 +2504,15 @@ function normalizeChannelId_(value) {
   return "";
 }
 function cancelKeyboard_() { return { keyboard: [[{ text: "❌ لغو" }]], resize_keyboard: true, is_persistent: true }; }
+// کیبورد اصلی کاربر/مدیر را بعد از هر جریان «❌ لغو» برمی‌گرداند.
+// اگر این ارسال شکست بخورد، کیبورد «❌ لغو» در چت می‌ماند و منو غیرقابل‌دسترس می‌شود؛
+// پس بدون is_persistent و با تلاش دوباره ارسال می‌شود.
+function restoreMainKeyboard_(chatId, uid) {
+  const id = String(uid || chatId);
+  const kb = isAdmin_(id) ? adminKeyboard_() : (getUserById_(id) && isLoggedIn_(id) ? userKeyboard_(id) : entryKeyboard_(id));
+  try { return sendMessage_(chatId, "🏠 منو برگشت.", kb); }
+  catch (e) { try { return sendMessage_(chatId, "🏠 منو", kb); } catch (e2) { logError_("restoreMainKeyboard_", e2, { userId: id }); } }
+}
 function htmlEscape_(v) { return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 function htmlUnescape_(v) { return String(v == null ? "" : v).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&"); }
 function truncate_(v, n) { const s = String(v || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
@@ -2683,7 +2722,10 @@ function sendEntryCard_(chatId, prefix) {
 }
 function showUserMenu_(chatId, prefix) {
   const uid = String(chatId);
-  sendMessage_(chatId, (prefix ? prefix + "\n\n" : "") + userMenuText_(uid), userKeyboard_(uid));
+  // خط تبلیغ زیر منوی کاربر (پیش‌فرض خاموش). با try محافظت شده تا منو هرگز به‌خاطر تبلیغ نشکند.
+  let adLine = "";
+  try { adLine = adLineForMenu_(); } catch (e) { adLine = ""; }
+  sendMessage_(chatId, (prefix ? prefix + "\n\n" : "") + userMenuText_(uid) + adLine, userKeyboard_(uid));
   try { maybePromptArtistLinks_(chatId, uid); } catch (e) {}
 }
 // برای هر هنرمند (تازه‌وارد یا قدیمی) یک‌بار درخواست ثبت لینک‌های پلتفرم می‌شود.
@@ -2737,6 +2779,166 @@ function cancelCurrentFlow_(message, session, admin) {
   if (isLoggedIn_(uid) && getUserById_(uid)) showUserMenu_(chatId, t_(uid, "CANCEL_DONE")); else sendEntryCard_(chatId, t_(uid, "CANCEL_DONE"));
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ماژول تبلیغات ۰.۱۵ — پیش‌فرض کاملاً خاموش
+// ═══════════════════════════════════════════════════════════════════════════
+// اصل طراحی: یک کلید اصلی (ADS_ENABLED) و شش کلید مکان جدا. اگر هر کدام false بود،
+// آن مکان هیچ تبلیغی نشان نمی‌دهد. هیچ تبلیغی به‌صورت پیش‌فرض روشن نمی‌شود.
+// تبدیل مقدارهای متنی به بولین یک‌جاست تا «true»/«1»/«روشن» همه یک‌طور خوانده شوند.
+function adFlagOn_(key) { return ["true", "1", "yes", "on", "روشن"].indexOf(String(getSetting_(key) || "").trim().toLowerCase()) >= 0; }
+function adsMasterEnabled_() { return adFlagOn_("ADS_ENABLED"); }
+// مکان‌های تبلیغاتی؛ هر مکان یک شناسه و یک کلید تنظیم دارد
+const AD_SLOTS_ = {
+  download: { key: "ADS_IN_DOWNLOAD", label: "بعد از ارسال فایل موزیک", desc: "بعد از اینکه فایل کامل برای کاربر فرستاده شد" },
+  caption:  { key: "ADS_IN_CAPTION",  label: "داخل کپشن فایل موزیک",  desc: "در متن زیر فایل ارسالی" },
+  menu:     { key: "ADS_IN_MENU",     label: "زیر منوی اصلی",         desc: "یک خط تبلیغ زیر منوی کاربر" },
+  messages: { key: "ADS_IN_MESSAGES", label: "انتهای پیام‌ها",        desc: "پایان پیام‌های عمومی ربات" },
+  channel:  { key: "ADS_IN_CHANNEL_POST", label: "کپشن پست کانال",    desc: "در پست منتشرشده در کانال" }
+};
+function adSlotEnabled_(slot) {
+  if (!adsMasterEnabled_()) return false;
+  const def = AD_SLOTS_[slot]; if (!def) return false;
+  return adFlagOn_(def.key);
+}
+function getAds_() {
+  try {
+    if (ADS_MEMO_ !== null) return ADS_MEMO_;
+    ADS_MEMO_ = readSheetObjects_(APP.SHEETS.ADS, HEADERS.Ads).map(function(r) {
+      return {
+        rowNumber: r.rowNumber,
+        adId: String(r.ad_id || ""),
+        slot: String(r.slot || ""),
+        kind: String(r.kind || "text"),
+        content: String(r.content || ""),
+        caption: String(r.caption || ""),
+        buttonText: String(r.button_text || ""),
+        buttonUrl: String(r.button_url || ""),
+        active: ["true", "1", "yes", "on"].indexOf(String(r.active || "").toLowerCase()) >= 0,
+        weight: Number(r.weight) || 1,
+        startsAt: r.starts_at || "",
+        endsAt: r.ends_at || "",
+        impressions: Number(r.impressions) || 0,
+        clicks: Number(r.clicks) || 0,
+        createdAt: r.created_at || ""
+      };
+    }).filter(function(a) { return a.adId; });
+    return ADS_MEMO_;
+  } catch (e) { logError_("getAds_", e); return []; }
+}
+function bustAdsCache_() { ADS_MEMO_ = null; }
+function adIsLive_(ad, atMs) {
+  if (!ad || !ad.active) return false;
+  const now = Number(atMs) || nowMs_();
+  const start = dateMillis_(ad.startsAt);
+  const end = dateMillis_(ad.endsAt);
+  if (start && now < start) return false;
+  if (end && now > end) return false;
+  return true;
+}
+// انتخاب تصادفی وزن‌دار؛ اگر تبلیغی برای مکان نبود null برمی‌گردد (نه استثنا).
+function pickAdForSlot_(slot) {
+  if (!adSlotEnabled_(slot)) return null;
+  const pool = getAds_().filter(function(a) { return a.slot === String(slot) && adIsLive_(a); });
+  if (!pool.length) {
+    // مکان «پایین‌ها» می‌تواند از تبلیغ عمومی استفاده کند
+    if (slot !== "messages") return null;
+    const generic = getAds_().filter(function(a) { return a.slot === "messages" && adIsLive_(a); });
+    return generic.length ? generic[0] : null;
+  }
+  const total = pool.reduce(function(n, a) { return n + Math.max(1, a.weight); }, 0);
+  let roll = Math.random() * total;
+  for (let i = 0; i < pool.length; i++) {
+    roll -= Math.max(1, pool[i].weight);
+    if (roll <= 0) return pool[i];
+  }
+  return pool[pool.length - 1];
+}
+// سقف نمایش در ساعت: کاربر نباید بیش از ADS_MAX_PER_HOUR تبلیغ ببیند.
+function adBudgetAllows_(uid) {
+  const max = Math.max(0, Number(getSetting_("ADS_MAX_PER_HOUR") || 3));
+  if (!max) return false;
+  return rateAllow_("ads:" + String(uid), max, 3600);
+}
+function adMarkup_(ad) {
+  if (!ad || !ad.buttonText || !ad.buttonUrl) return null;
+  if (!/^https?:\/\//i.test(String(ad.buttonUrl))) return null;
+  return { inline_keyboard: [[{ text: String(ad.buttonText).slice(0, 64), url: String(ad.buttonUrl) }]] };
+}
+function adText_(ad) {
+  if (!ad) return "";
+  return String(ad.kind === "media" ? (ad.caption || ad.content) : (ad.content || ad.caption) || "").trim();
+}
+function recordAdImpression_(ad) {
+  if (!ad) return;
+  try {
+    const sh = getSheet_(APP.SHEETS.ADS);
+    sh.getRange(ad.rowNumber, 12).setValue(Number(ad.impressions || 0) + 1);
+    ad.impressions = Number(ad.impressions || 0) + 1;
+  } catch (e) { logError_("recordAdImpression_", e, { adId: ad.adId }); }
+}
+// تبلیغ مکان «download»: یک پیام جدا بعد از فایل ارسال می‌شود.
+// اگر تبلیغ مدیا باشد، همان رسانه با دکمه می‌رود؛ اگر متن باشد، پیام متنی.
+function sendAdForSlot_(chatId, uid, slot) {
+  if (!adSlotEnabled_(slot)) return false;
+  if (!adBudgetAllows_(uid)) return false;
+  const ad = pickAdForSlot_(slot);
+  if (!ad) return false;
+  const markup = adMarkup_(ad);
+  const text = adText_(ad);
+  let sent = null;
+  try {
+    if (ad.kind === "media" && ad.caption && /^(https?:\/\/|AgA)/.test(ad.content)) {
+      // content می‌تواند file_id یا URL عکس باشد
+      sent = telegramRequest_("sendPhoto", { chat_id: String(chatId), photo: ad.content, caption: text, parse_mode: "HTML", reply_markup: markup || undefined });
+      if (!sent || !sent.ok) sent = sendMessage_(chatId, text, markup);
+    } else {
+      sent = sendMessage_(chatId, text, markup);
+    }
+  } catch (e) { logError_("sendAdForSlot_", e, { adId: ad.adId }); return false; }
+  if (sent && sent.ok) { recordAdImpression_(ad); return true; }
+  return false;
+}
+// تبلیغ برای کپشن: فقط یک خط متن اضافه می‌شود (بدون دکمه، چون کپشن مدیا دکمهٔ خودش را دارد).
+// اگر ADS_FOOTER_TEXT دستی پر شده باشد، آن مقدم است تا مدیر بتواند متن ثابت بگذارد.
+function adFooterForCaption_(slot) {
+  const manual = String(getSetting_("ADS_FOOTER_TEXT") || "").trim();
+  const slotOn = !slot || adSlotEnabled_(slot);
+  if (!slotOn) return "";
+  if (manual) return manual;
+  return "";
+}
+// تبلیغ زیر منو: یک خط کوتاه، بدون دکمهٔ اضافه که منو را شلوغ کند.
+function adLineForMenu_() {
+  if (!adSlotEnabled_("menu")) return "";
+  const ad = pickAdForSlot_("menu");
+  if (!ad) return "";
+  const text = adText_(ad);
+  if (!text) return "";
+  return "\n\n" + text + (ad.buttonUrl ? "\n🔗 " + ad.buttonUrl : "");
+}
+function adLineForMessageTail_() {
+  if (!adSlotEnabled_("messages")) return "";
+  const ad = pickAdForSlot_("messages");
+  if (!ad) return "";
+  const text = adText_(ad);
+  if (!text) return "";
+  return "\n\n─────────\n" + text + (ad.buttonUrl ? "\n🔗 " + ad.buttonUrl : "");
+}
+function adLineForChannelCaption_() {
+  if (!adSlotEnabled_("channel")) return "";
+  const ad = pickAdForSlot_("channel");
+  if (!ad) return "";
+  const text = adText_(ad);
+  return text ? "\n\n" + text : "";
+}
+// کمکی برای پنل: شمارش تبلیغ هر مکان
+function adCountBySlot_() {
+  const out = {};
+  Object.keys(AD_SLOTS_).forEach(function(k) { out[k] = 0; });
+  getAds_().forEach(function(a) { if (out[a.slot] != null) out[a.slot]++; });
+  return out;
+}
+
 // ───────────────────────── وب‌هوک و دیسپچ ─────────────────────────
 function doPost(e) {
   resetRuntimeCaches_();
@@ -2744,6 +2946,7 @@ function doPost(e) {
   try { ensureMusicDownloadDefaultMigration_(); } catch (migrationError) { console.error("Music download default migration: " + migrationError); }
   try { ensureV013Schema_(); } catch (schemaError) { console.error("Schema 0.13: " + schemaError); }
   try { ensureV014Settings_(); } catch (settingsError) { console.error("Settings 0.14: " + settingsError); }
+  try { ensureV015AdsSchema_(); } catch (adsError) { console.error("Ads 0.15: " + adsError); }
   try {
     if (!e || !e.postData || !e.postData.contents) return HtmlService.createHtmlOutput("OK");
     if (e.parameter && e.parameter.ws) {
@@ -6137,7 +6340,11 @@ function handleMusicDownloadDelivery_(chatId, uid, trackIdOrSubmissionId) {
   const safeArtists = htmlEscape_(artists);
   const tgTarget = getChannelTelegramTarget_() || { url: "https://t.me/RapEvils", label: "Telegram · @RapEvils" };
   const tgLine = "🔵 " + linkHtml_(tgTarget.url, tgTarget.label);
-  const caption = isAlbum ? t_(uid, "DOWNLOAD_ALBUM_CAPTION", { t: safeTitle, a: safeArtists, n: seconds, tg: tgLine }) : t_(uid, "DOWNLOAD_CAPTION", { t: safeTitle, a: safeArtists, n: seconds, tg: tgLine });
+  // خط تبلیغ داخل کپشن (پیش‌فرض خاموش). کوتاه است تا زیر سقف ۱۰۲۴ نویسهٔ کپشن بماند.
+  let adCap = "";
+  try { adCap = adFooterForCaption_("caption"); } catch (e) { adCap = ""; }
+  const baseCaption = isAlbum ? t_(uid, "DOWNLOAD_ALBUM_CAPTION", { t: safeTitle, a: safeArtists, n: seconds, tg: tgLine }) : t_(uid, "DOWNLOAD_CAPTION", { t: safeTitle, a: safeArtists, n: seconds, tg: tgLine });
+  const caption = adCap ? (baseCaption + "\n\n" + adCap).slice(0, 1000) : baseCaption;
   const sentIds = [];
   if (isAlbum) {
     for (let i = 0; i < tracks.length; i += 10) {
@@ -6166,6 +6373,9 @@ function handleMusicDownloadDelivery_(chatId, uid, trackIdOrSubmissionId) {
   }
   if (u) { try { setUserField_(uid, "lastDownloadMessageIds", sentIds.join("|")); setUserField_(uid, "lastDownloadAt", new Date()); } catch (e) {} }
   enqueueMusicDeletion_(chatId, track.submissionId, sentIds, nowMs_() + seconds * 1000);
+  // تبلیغ بعد از تحویل فایل — فقط اگر مدیر روشن کرده باشد و سقف ساعتی کاربر پر نشده باشد.
+  // خطا هرگز نباید تحویل فایل را خراب کند، پس کل فراخوانی محافظت‌شده است.
+  try { sendAdForSlot_(chatId, uid, "download"); } catch (e) { logError_("ad_after_download", e, { userId: uid }); }
   return true;
 }
 
@@ -6291,6 +6501,12 @@ function buildPostCaption_(submission, options) {
   // اگر در کپشن دستی خودش هشتگ نوشته باشند، هشتگ خودکار اضافه نمی‌شود (کنترل کامل با نویسنده).
   const hashtags = (custom && custom.indexOf("#") >= 0) ? "" : buildPostHashtags_(sub);
   if (hashtags) blocks.push(hashtags);
+  // خط تبلیغ در کپشن پست کانال (پیش‌فرض خاموش). قبل از فوتر تا فوتر همیشه آخر بماند.
+  if (!opts.compact) {
+    let adPost = "";
+    try { adPost = adLineForChannelCaption_(); } catch (e) { adPost = ""; }
+    if (adPost) blocks.push(adPost.trim());
+  }
   if (!opts.compact) {
     let footer = String(destChannel && destChannel.footer != null && destChannel.footer !== "" ? destChannel.footer : (getSetting_("CHANNEL_FOOTER") || "")).trim();
     const isPlainTme = /^\s*(\[t\.me\]\(http:\/\/t\.me\)|https?:\/\/t\.me\/?|t\.me)\s*$/i.test(footer);
@@ -8327,6 +8543,10 @@ function showAdminMenu_(chatId, prefix) {
   // نسخهٔ ۰.۱۴: منوی اصلی همان داشبورد ۸ دسته‌ای است؛ پیام‌های پایانی جریان‌ها
   // (مثل «✅ ثبت شد») به‌صورت پیشوند جداگانه فرستاده می‌شوند و بعد داشبورد می‌آید.
   if (prefix) sendMessage_(chatId, prefix);
+  // باگ رفع‌شده: جریان‌هایی که با cancelKeyboard_ («❌ لغو» + is_persistent) شروع می‌شدند،
+  // بعد از پایان/لغو کیبورد را برنمی‌گرداندند و منوی اصلی برای همیشه با «❌ لغو» قفل می‌شد.
+  // اینجا کیبورد اصلی ۸ دسته‌ای صریحاً فرستاده می‌شود.
+  sendMessage_(chatId, "🏠 منوی مدیریت", adminKeyboard_());
   showDashboardHome_(chatId, String(chatId), null);
 }
 function adminGate_(chatId, uid, permission) {
@@ -9469,6 +9689,25 @@ function handleAdminState_(message, session) {
   const requiredPermission = adminPermissionForState_(state, data);
   if (requiredPermission && !hasAdminPermission_(uid, requiredPermission)) { clearSession_("M:" + uid); sendMessage_(chatId, "⛔ نقش تو اجازهٔ این کار را ندارد.", adminKeyboard_()); return; }
   const finish = function(reply) { clearSession_("M:" + uid); showAdminMenu_(chatId, reply); };
+
+  // ── ۰.۱۵: ویزارد تبلیغات (متن آزاد فقط همین‌جا، با انصراف) ──
+  if (state === "ADM_AD_NEW_CONTENT") {
+    finishAdCreate_(chatId, uid, data, text);
+    return;
+  }
+  if (state === "ADM_AD_EDIT_CONTENT") {
+    const ad = getAds_().find(function(a) { return a.adId === String(data.adId || ""); });
+    if (!ad) { clearSession_("M:" + uid); sendMessage_(chatId, "تبلیغ پیدا نشد.", adminKeyboard_()); return; }
+    if (!text) { sendMessage_(chatId, "متن خالی است. دوباره بفرست یا «❌ لغو».", cancelKeyboard_()); return; }
+    if (text.length > 1000) { sendMessage_(chatId, "حداکثر ۱۰۰۰ نویسه. کوتاه‌ترش کن.", cancelKeyboard_()); return; }
+    getSheet_(APP.SHEETS.ADS).getRange(ad.rowNumber, 4).setValue(text);
+    bustAdsCache_();
+    logAdminAction_(uid, "ads_edit", ad.adId, "");
+    clearSession_("M:" + uid);
+    sendMessage_(chatId, "✅ متن تبلیغ به‌روز شد.", adminKeyboard_());
+    showAdminAdCard_(chatId, uid, ad.adId, null);
+    return;
+  }
 
   // ── ۰.۱۳: اشتراک VIP ──
   if (state === "ADM_VIP_PLAN_NEW") {
@@ -13240,6 +13479,210 @@ function showDashPlanBuilder_(chatId, uid, msgId) {
   sendOrEditAdminPanel_(chatId, msgId, lines, { inline_keyboard: rows });
 }
 
+// ── ۵.۰) سیستم تبلیغات (نسخهٔ ۰.۱۵) — پیش‌فرض خاموش ──
+// مدیر بدون دست‌زدن به شیت: کلید اصلی، شش مکان، و فهرست تبلیغ‌ها.
+function settingOnFa_(key) { return adFlagOn_(key) ? "روشن" : "خاموش"; }
+// عددهای شمارشی در متن‌های فارسی باید فارسی نمایش داده شوند (قرارداد پروژه).
+// برای قیمت‌ها از toLocaleString استفاده می‌شود، نه این.
+function faDigits_(v) { return String(v == null ? "" : v).replace(/[0-9]/g, function(d) { return "۰۱۲۳۴۵۶۷۸۹"[Number(d)]; }); }
+function showAdminAdsPanel_(chatId, uid, msgId) {
+  if (!adminGate_(chatId, uid, "broadcast")) return;
+  const ads = getAds_();
+  const counts = adCountBySlot_();
+  const live = ads.filter(function(a) { return adIsLive_(a); }).length;
+  const lines = [
+    "📰 تبلیغات",
+    "━━━━━━━━━━━━━━━━━━",
+    "🔌 کلید اصلی: " + settingOnFa_("ADS_ENABLED"),
+    adsMasterEnabled_() ? "✅ سیستم تبلیغات روشن است." : "ℹ️ سیستم خاموش است؛ هیچ تبلیغی هیچ‌جا نمایش داده نمی‌شود.",
+    "",
+    "📍 مکان‌ها:",
+    "• بعد از فایل موزیک: " + settingOnFa_("ADS_IN_DOWNLOAD") + " (" + faDigits_(counts.download) + ")",
+    "• داخل کپشن فایل: " + settingOnFa_("ADS_IN_CAPTION") + " (" + faDigits_(counts.caption) + ")",
+    "• زیر منوی اصلی: " + settingOnFa_("ADS_IN_MENU") + " (" + faDigits_(counts.menu) + ")",
+    "• انتهای پیام‌ها: " + settingOnFa_("ADS_IN_MESSAGES") + " (" + faDigits_(counts.messages) + ")",
+    "• کپشن پست کانال: " + settingOnFa_("ADS_IN_CHANNEL_POST") + " (" + faDigits_(counts.channel) + ")",
+    "",
+    "🗂 کل تبلیغ‌ها: " + faDigits_(ads.length) + " · فعال: " + faDigits_(live),
+    "🛡 سقف نمایش به هر کاربر: " + faDigits_(getSetting_("ADS_MAX_PER_HOUR") || "3") + " در ساعت"
+  ].join("\n");
+  const rows = [
+    [{ text: (adsMasterEnabled_() ? "✅" : "⭕️") + " کلید اصلی تبلیغات", callback_data: "d:ads:master" }],
+    [{ text: (adFlagOn_("ADS_IN_DOWNLOAD") ? "✅" : "⬜️") + " بعد از فایل موزیک", callback_data: "d:ads:slot:download" }],
+    [{ text: (adFlagOn_("ADS_IN_CAPTION") ? "✅" : "⬜️") + " داخل کپشن فایل", callback_data: "d:ads:slot:caption" }],
+    [{ text: (adFlagOn_("ADS_IN_MENU") ? "✅" : "⬜️") + " زیر منوی اصلی", callback_data: "d:ads:slot:menu" }],
+    [{ text: (adFlagOn_("ADS_IN_MESSAGES") ? "✅" : "⬜️") + " انتهای پیام‌ها", callback_data: "d:ads:slot:messages" }],
+    [{ text: (adFlagOn_("ADS_IN_CHANNEL_POST") ? "✅" : "⬜️") + " کپشن پست کانال", callback_data: "d:ads:slot:channel" }],
+    [{ text: "📋 فهرست تبلیغ‌ها", callback_data: "d:ads:list:0" }, { text: "➕ تبلیغ جدید", callback_data: "d:ads:new" }],
+    [{ text: "🛡 سقف نمایش در ساعت", callback_data: "d:ads:cap" }],
+    [{ text: "⬅️ بازگشت", callback_data: "d:adv:hub" }]
+  ];
+  sendOrEditAdminPanel_(chatId, msgId, lines, { inline_keyboard: rows });
+}
+function showAdminAdsList_(chatId, uid, page, msgId) {
+  if (!adminGate_(chatId, uid, "broadcast")) return;
+  const ads = getAds_().slice().sort(function(a, b) { return dateMillis_(b.createdAt) - dateMillis_(a.createdAt); });
+  if (!ads.length) {
+    sendOrEditAdminPanel_(chatId, msgId, "📋 هیچ تبلیغی ثبت نشده.\nبا «➕ تبلیغ جدید» اولین تبلیغ را بساز — تا وقتی روشنش نکنی جایی نمایش داده نمی‌شود.",
+      { inline_keyboard: [[{ text: "➕ تبلیغ جدید", callback_data: "d:ads:new" }], [{ text: "⬅️ بازگشت", callback_data: "d:ads:hub" }]] });
+    return;
+  }
+  const per = 6;
+  const pages = Math.max(1, Math.ceil(ads.length / per));
+  const p = Math.max(0, Math.min(pages - 1, Number(page) || 0));
+  const slice = ads.slice(p * per, (p + 1) * per);
+  const slotLabel = function(s) { return (AD_SLOTS_[s] && AD_SLOTS_[s].label) || s; };
+  const lines = ["📋 تبلیغ‌ها — " + faDigits_(ads.length) + " مورد" + (pages > 1 ? " · صفحهٔ " + faDigits_(p + 1) + "/" + faDigits_(pages) : "")];
+  slice.forEach(function(a) {
+    lines.push("");
+    lines.push((a.active ? "🟢" : "⚪️") + " " + a.adId + " · " + slotLabel(a.slot));
+    lines.push("   " + truncate_(adText_(a).replace(/\n/g, " ") || "—", 60));
+    lines.push("   👁 " + faDigits_(a.impressions) + " نمایش");
+  });
+  const rows = slice.map(function(a) {
+    return [{ text: (a.active ? "🟢 " : "⚪️ ") + a.adId + " · " + truncate_(slotLabel(a.slot), 20), callback_data: "d:ads:view:" + a.adId }];
+  });
+  const nav = [];
+  if (p > 0) nav.push({ text: "◀️ قبلی", callback_data: "d:ads:list:" + (p - 1) });
+  if (p < pages - 1) nav.push({ text: "بعدی ▶️", callback_data: "d:ads:list:" + (p + 1) });
+  if (nav.length) rows.push(nav);
+  rows.push([{ text: "➕ تبلیغ جدید", callback_data: "d:ads:new" }]);
+  rows.push([{ text: "⬅️ بازگشت", callback_data: "d:ads:hub" }]);
+  sendOrEditAdminPanel_(chatId, msgId, lines.join("\n"), { inline_keyboard: rows });
+}
+function showAdminAdCard_(chatId, uid, adId, msgId) {
+  if (!adminGate_(chatId, uid, "broadcast")) return;
+  const ad = getAds_().find(function(a) { return a.adId === String(adId); });
+  if (!ad) { showAdminAdsList_(chatId, uid, 0, msgId); return; }
+  const slotLabel = (AD_SLOTS_[ad.slot] && AD_SLOTS_[ad.slot].label) || ad.slot;
+  const lines = [
+    "📰 تبلیغ " + ad.adId,
+    "━━━━━━━━━━━━━━━━━━",
+    "📍 مکان: " + slotLabel,
+    "🔌 وضعیت: " + (ad.active ? "فعال" : "غیرفعال") + (adIsLive_(ad) ? " · در حال نمایش" : ""),
+    "👁 نمایش: " + faDigits_(ad.impressions),
+    "",
+    "متن:",
+    truncate_(adText_(ad) || "—", 300),
+    ad.buttonText ? "\n🔗 دکمه: " + ad.buttonText + " → " + ad.buttonUrl : "\n🔗 بدون دکمه"
+  ].join("\n");
+  const rows = [
+    [{ text: (ad.active ? "⏸ غیرفعال کن" : "▶️ فعال کن"), callback_data: "d:ads:toggle:" + ad.adId }, { text: "✏️ ویرایش متن", callback_data: "d:ads:edit:" + ad.adId }],
+    [{ text: "🗑 حذف", callback_data: "d:ads:del:" + ad.adId }, { text: "👁 پیش‌نمایش", callback_data: "d:ads:preview:" + ad.adId }],
+    [{ text: "⬅️ فهرست", callback_data: "d:ads:list:0" }]
+  ];
+  sendOrEditAdminPanel_(chatId, msgId, lines, { inline_keyboard: rows });
+}
+function showAdminAdPreview_(chatId, uid, adId) {
+  if (!adminGate_(chatId, uid, "broadcast")) return;
+  const ad = getAds_().find(function(a) { return a.adId === String(adId); });
+  if (!ad) { sendMessage_(chatId, "تبلیغ پیدا نشد."); return; }
+  sendMessage_(chatId, "👇 پیش‌نمایش — همین چیزی است که کاربر می‌بیند:\n\n─────────", null);
+  sendMessage_(chatId, adText_(ad) || "—", adMarkup_(ad));
+  sendMessage_(chatId, "⬆️ پایان پیش‌نمایش.", { inline_keyboard: [[{ text: "⬅️ کارت تبلیغ", callback_data: "d:ads:view:" + ad.adId }]] });
+}
+// ویزارد ساخت تبلیغ — متن آزاد فقط همین‌جا، با راهنما و دکمهٔ انصراف
+function startAdWizard_(chatId, uid) {
+  if (!adminGate_(chatId, uid, "broadcast")) return;
+  const rows = Object.keys(AD_SLOTS_).map(function(k) {
+    const d = AD_SLOTS_[k];
+    return [{ text: d.label, callback_data: "d:ads:newslot:" + k }];
+  });
+  rows.push([{ text: "❌ انصراف", callback_data: "d:ads:hub" }]);
+  sendMessage_(chatId, "📰 تبلیغ جدید — کجا نمایش داده شود؟\n\n" +
+    Object.keys(AD_SLOTS_).map(function(k) { return "• " + AD_SLOTS_[k].label + " — " + AD_SLOTS_[k].desc; }).join("\n"),
+    { inline_keyboard: rows });
+}
+function handleAdsCallback_(cb, ns, parts) {
+  const uid = String(cb.from.id); const chatId = cb.message && cb.message.chat ? String(cb.message.chat.id) : uid;
+  const msgId = cb.message ? cb.message.message_id : null;
+  const sub = String(parts[2] || "");
+  if (sub === "hub") { answerCallbackQuery_(cb.id); showAdminAdsPanel_(chatId, uid, msgId); return true; }
+  if (sub === "master") { answerCallbackQuery_(cb.id); setSetting_("ADS_ENABLED", adsMasterEnabled_() ? "false" : "true"); logAdminAction_(uid, "ads_master", adsMasterEnabled_() ? "on" : "off", ""); showAdminAdsPanel_(chatId, uid, msgId); return true; }
+  if (sub === "slot") {
+    const slot = String(parts[3] || "");
+    const def = AD_SLOTS_[slot];
+    if (!def) { answerCallbackQuery_(cb.id, "مکان نامعتبر است."); return true; }
+    const next = adFlagOn_(def.key) ? "false" : "true";
+    setSetting_(def.key, next);
+    answerCallbackQuery_(cb.id, def.label + ": " + (next === "true" ? "روشن" : "خاموش"));
+    logAdminAction_(uid, "ads_slot_" + slot, next, "");
+    showAdminAdsPanel_(chatId, uid, msgId); return true;
+  }
+  if (sub === "list") { answerCallbackQuery_(cb.id); showAdminAdsList_(chatId, uid, Number(parts[3]) || 0, msgId); return true; }
+  if (sub === "view") { answerCallbackQuery_(cb.id); showAdminAdCard_(chatId, uid, parts[3], msgId); return true; }
+  if (sub === "preview") { answerCallbackQuery_(cb.id); showAdminAdPreview_(chatId, uid, parts[3]); return true; }
+  if (sub === "toggle") {
+    const ad = getAds_().find(function(a) { return a.adId === String(parts[3]); });
+    if (!ad) { answerCallbackQuery_(cb.id, "تبلیغ پیدا نشد."); return true; }
+    const sh = getSheet_(APP.SHEETS.ADS);
+    sh.getRange(ad.rowNumber, 8).setValue(!ad.active);
+    ad.active = !ad.active; bustAdsCache_();
+    answerCallbackQuery_(cb.id, ad.active ? "فعال شد" : "غیرفعال شد");
+    logAdminAction_(uid, "ads_toggle", ad.adId, ad.active ? "on" : "off");
+    showAdminAdCard_(chatId, uid, ad.adId, msgId); return true;
+  }
+  if (sub === "del") {
+    // حذف دو مرحله‌ای: اول تأیید، بعد حذف
+    sendOrEditAdminPanel_(chatId, msgId, "⚠️ حذف تبلیغ " + parts[3] + " برگشت‌پذیر نیست.\nمطمئنی؟",
+      { inline_keyboard: [[{ text: "🗑 بله، حذف کن", callback_data: "d:ads:delgo:" + parts[3] }], [{ text: "⬅️ انصراف", callback_data: "d:ads:view:" + parts[3] }]] });
+    answerCallbackQuery_(cb.id); return true;
+  }
+  if (sub === "delgo") {
+    const ad = getAds_().find(function(a) { return a.adId === String(parts[3]); });
+    if (ad) { getSheet_(APP.SHEETS.ADS).deleteRow(ad.rowNumber); bustAdsCache_(); logAdminAction_(uid, "ads_delete", ad.adId, ""); }
+    answerCallbackQuery_(cb.id, "حذف شد");
+    showAdminAdsList_(chatId, uid, 0, msgId); return true;
+  }
+  if (sub === "new") { answerCallbackQuery_(cb.id); startAdWizard_(chatId, uid); return true; }
+  if (sub === "newslot") {
+    const slot = String(parts[3] || "");
+    if (!AD_SLOTS_[slot]) { answerCallbackQuery_(cb.id, "مکان نامعتبر است."); return true; }
+    setSession_("M:" + uid, "ADM_AD_NEW_CONTENT", { slot: slot });
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, "📝 متن تبلیغ برای «" + AD_SLOTS_[slot].label + "» را بفرست.\n\n" +
+      "• کوتاه و روشن بنویس (زیر ۳۰۰ نویسه پیشنهاد می‌شود).\n" +
+      "• می‌توانی لینک هم داخل متن بگذاری.\n" +
+      "• برای انصراف «❌ لغو» را بزن.", cancelKeyboard_());
+    return true;
+  }
+  if (sub === "cap") {
+    answerCallbackQuery_(cb.id);
+    const rows = [1, 2, 3, 5, 10].map(function(n) { return [{ text: (Number(getSetting_("ADS_MAX_PER_HOUR") || 3) === n ? "✅ " : "") + n + " بار در ساعت", callback_data: "d:ads:capset:" + n }]; });
+    rows.push([{ text: "⬅️ بازگشت", callback_data: "d:ads:hub" }]);
+    sendOrEditAdminPanel_(chatId, msgId, "🛡 سقف نمایش تبلیغ برای هر کاربر در ساعت", { inline_keyboard: rows });
+    return true;
+  }
+  if (sub === "capset") { setSetting_("ADS_MAX_PER_HOUR", String(Number(parts[3]) || 3)); answerCallbackQuery_(cb.id, "ثبت شد"); showAdminAdsPanel_(chatId, uid, msgId); return true; }
+  if (sub === "edit") {
+    setSession_("M:" + uid, "ADM_AD_EDIT_CONTENT", { adId: String(parts[3] || "") });
+    answerCallbackQuery_(cb.id);
+    sendMessage_(chatId, "✏️ متن جدید تبلیغ را بفرست (متن قبلی جای‌گزین می‌شود).\nبرای انصراف «❌ لغو».", cancelKeyboard_());
+    return true;
+  }
+  return false;
+}
+function finishAdCreate_(chatId, uid, data, text) {
+  const slot = String((data || {}).slot || "");
+  if (!AD_SLOTS_[slot]) { sendMessage_(chatId, "مکان تبلیغ نامعتبر شد؛ از ابتدا شروع کن.", adminKeyboard_()); return; }
+  const body = String(text || "").trim();
+  if (!body) { sendMessage_(chatId, "متن خالی است. دوباره بفرست.", cancelKeyboard_()); return; }
+  if (body.length > 1000) { sendMessage_(chatId, "متن تبلیغ حداکثر ۱۰۰۰ نویسه است. کوتاه‌ترش کن.", cancelKeyboard_()); return; }
+  const adId = "AD" + String(nowMs_()).slice(-6);
+  appendRowObject_(APP.SHEETS.ADS, HEADERS.Ads, {
+    ad_id: adId, slot: slot, kind: "text", content: body, caption: "",
+    button_text: "", button_url: "", active: false, weight: 1,
+    starts_at: "", ends_at: "", impressions: 0, clicks: 0, created_at: new Date()
+  });
+  bustAdsCache_();
+  logAdminAction_(uid, "ads_create", adId, slot);
+  clearSession_("M:" + uid);
+  // تبلیغ عمداً «غیرفعال» ساخته می‌شود تا مدیر اول ببیند و بعد روشن کند.
+  sendMessage_(chatId, "✅ تبلیغ " + adId + " ساخته شد ولی هنوز غیرفعال است.\n" +
+    "از کارت تبلیغ «▶️ فعال کن» را بزن تا نمایش داده شود.", adminKeyboard_());
+  showAdminAdCard_(chatId, uid, adId, null);
+}
+
 // ── ۵) هاب تبلیغات و پیام‌رسانی ──
 function showAdminBroadcastHub_(chatId, uid, msgId) {
   if (!adminGate_(chatId, uid, "broadcast")) return;
@@ -13258,6 +13701,7 @@ function showAdminBroadcastHub_(chatId, uid, msgId) {
     [{ text: "➕ کمپین جدید", callback_data: "bc:new" }, { text: "📨 همهٔ کمپین‌ها", callback_data: "d:adv:hub" }],
     [{ text: "😴 کمپین غیرفعال‌ها", callback_data: "bc:inactive" }, { text: "⚙️ تنظیمات غیرفعال‌ها", callback_data: "a:inactive" }],
     [{ text: "🖼 بنر تبلیغاتی", callback_data: "bn:panel" }, { text: "📢 کانال‌های وصل‌شده", callback_data: "acc:list:0" }],
+    [{ text: "📰 سیستم تبلیغات" + (adsMasterEnabled_() ? " · روشن" : " · خاموش"), callback_data: "d:ads:hub" }],
     [{ text: "🏠 منو", callback_data: "d:home" }]
   ];
   list.slice(0, 3).forEach(function(b) { rows.push([{ text: "📨 " + b.broadcastId + " · " + (labels[b.status] || b.status), callback_data: "bc:view:" + b.broadcastId }]); });
@@ -13469,7 +13913,12 @@ function handleDashboardCallback_(cb) {
   const ns = parts[1] || "home";
   const sub = parts[2] || "";
 
-  if (ns === "home") { answerCallbackQuery_(cb.id); showDashboardHome_(chatId, uid, msgId); return; }
+  if (ns === "home") { answerCallbackQuery_(cb.id); sendMessage_(chatId, "🏠 منوی مدیریت", adminKeyboard_()); showDashboardHome_(chatId, uid, msgId); return; }
+
+  // ── تبلیغات (نسخهٔ ۰.۱۵) ──
+  if (ns === "ads") {
+    if (handleAdsCallback_(cb, "ads", parts)) return;
+  }
 
   // ── موزیک ──
   if (ns === "mus") {
@@ -13712,6 +14161,7 @@ function handleDashboardCallback_(cb) {
   if (ns === "adv") {
     if (sub === "hub") { answerCallbackQuery_(cb.id); showAdminBroadcastHub_(chatId, uid, msgId); return; }
   }
+
 
   // ── پشتیبانی ──
   if (ns === "sup") {
